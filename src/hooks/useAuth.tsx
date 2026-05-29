@@ -24,7 +24,8 @@ interface AuthContextValue {
   signUp: (
     email: string,
     password: string,
-    fullName: string
+    fullName: string,
+    desiredRole?: "user" | "agent"
   ) => Promise<{ error: string | null; needsVerification: boolean }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -95,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null };
   };
 
-  const signUp: AuthContextValue["signUp"] = async (email, password, fullName) => {
+  const signUp: AuthContextValue["signUp"] = async (email, password, fullName, desiredRole = "user") => {
     if (!supabase) return { error: "Supabase not configured", needsVerification: false };
     const redirectTo = typeof window !== "undefined" ? window.location.origin : undefined;
     const { data, error } = await supabase.auth.signUp({
@@ -107,6 +108,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
     if (error) return { error: error.message, needsVerification: false };
+
+    // If an agent role was requested, insert it after the DB trigger creates the default 'user' row.
+    // We do this only for 'agent' since 'user' is already inserted by the trigger.
+    if (desiredRole === "agent" && data.user) {
+      await supabase
+        .from("user_roles")
+        .upsert({ user_id: data.user.id, role: "agent" }, { onConflict: "user_id,role" });
+
+      // Also update the profile row's role column for display purposes
+      await supabase
+        .from("users")
+        .update({ role: "agent" })
+        .eq("id", data.user.id);
+    }
+
     const needsVerification = !data.session;
     return { error: null, needsVerification };
   };
