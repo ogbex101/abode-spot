@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Loader2, LayoutDashboard, Building2, Users, Inbox, Star, LogOut,
-  Bell, Search, Menu, X, Leaf, ChevronRight, Settings, ExternalLink
+  Bell, Search, Menu, X, Leaf, ChevronRight, Settings, ExternalLink,
+  PlusCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ export const Route = createFileRoute("/_authenticated/_admin")({
 const NAV = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, desc: "Overview & analytics" },
   { to: "/admin/properties", label: "Properties", icon: Building2, desc: "Manage all listings" },
+  { to: "/admin/add-property", label: "Add Property", icon: PlusCircle, desc: "Create a new listing" },
   { to: "/admin/users", label: "Users", icon: Users, desc: "User management" },
   { to: "/admin/featured", label: "Featured", icon: Star, desc: "Featured listings" },
   { to: "/admin/inquiries", label: "Inquiries", icon: Inbox, desc: "Messages & leads" },
@@ -85,6 +87,7 @@ function AdminLayout() {
           {NAV.map((n) => {
             const Icon = n.icon;
             const active = path === n.to;
+            const isAdd = n.to === "/admin/add-property";
             return (
               <Link
                 key={n.to}
@@ -94,6 +97,8 @@ function AdminLayout() {
                   "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all hover:bg-sidebar-accent",
                   active
                     ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
+                    : isAdd
+                    ? "text-primary font-medium hover:text-primary"
                     : "text-sidebar-foreground/70 hover:text-sidebar-foreground"
                 )}
               >
@@ -169,7 +174,7 @@ function AdminLayout() {
         {/* Page content */}
         <main className="flex-1 p-4 md:p-6 overflow-auto">
           {/* Page header */}
-          {currentPage && (
+          {currentPage && currentPage.to !== "/admin/add-property" && (
             <div className="mb-6">
               <h1 className="text-2xl font-bold" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
                 {currentPage.label}
