@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   Search, MapPin, Building2, Users, Award, ArrowRight, Star,
-  TrendingUp, Shield, Home, CheckCircle2, Quote, ChevronRight,
+  TrendingUp, Shield, Home as HomeIcon, CheckCircle2, Quote, ChevronRight,
   Zap, Globe, Clock, HeartHandshake, Phone, Mail, MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -290,7 +290,7 @@ function Home() {
             },
             {
               step: "02",
-              icon: <Home className="h-7 w-7" />,
+              icon: <HomeIcon className="h-7 w-7" />,
               title: "Visit & Compare",
               desc: "Schedule viewings, compare listings side by side, and save your favourites."
             },
