@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 // Supabase browser client.
 // Reads VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY from .env.
 // If missing, exports `null` so the app still renders with mock data.
