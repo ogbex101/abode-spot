@@ -27,6 +27,7 @@ import { Route as AuthenticatedAdminAdminInquiriesRouteImport } from './routes/_
 import { Route as AuthenticatedAdminAdminFeaturedRouteImport } from './routes/_authenticated/_admin/admin.featured'
 import { Route as AuthenticatedAdminAdminDashboardRouteImport } from './routes/_authenticated/_admin/admin.dashboard'
 import { Route as AuthenticatedAdminAdminAddPropertyRouteImport } from './routes/_authenticated/_admin/admin.add-property'
+import { Route as AuthenticatedAdminAdminHomepageRouteImport } from './routes/_authenticated/_admin/admin.homepage'
 
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
@@ -118,6 +119,12 @@ const AuthenticatedAdminAdminDashboardRoute =
     path: '/admin/dashboard',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminAdminHomepageRoute =
+  AuthenticatedAdminAdminHomepageRouteImport.update({
+    id: '/admin/homepage',
+    path: '/admin/homepage',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminAdminAddPropertyRoute =
   AuthenticatedAdminAdminAddPropertyRouteImport.update({
     id: '/admin/add-property',
@@ -136,8 +143,10 @@ export interface FileRoutesByFullPath {
   '/property/$id': typeof PropertyIdRoute
   '/agent/inquiries': typeof AuthenticatedAgentInquiriesRoute
   '/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
+  '/admin/homepage': typeof AuthenticatedAdminAdminHomepageRoute
   '/admin/dashboard': typeof AuthenticatedAdminAdminDashboardRoute
   '/admin/featured': typeof AuthenticatedAdminAdminFeaturedRoute
+  '/admin/homepage': typeof AuthenticatedAdminAdminHomepageRoute
   '/admin/inquiries': typeof AuthenticatedAdminAdminInquiriesRoute
   '/admin/properties': typeof AuthenticatedAdminAdminPropertiesRoute
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
@@ -154,8 +163,10 @@ export interface FileRoutesByTo {
   '/property/$id': typeof PropertyIdRoute
   '/agent/inquiries': typeof AuthenticatedAgentInquiriesRoute
   '/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
+  '/admin/homepage': typeof AuthenticatedAdminAdminHomepageRoute
   '/admin/dashboard': typeof AuthenticatedAdminAdminDashboardRoute
   '/admin/featured': typeof AuthenticatedAdminAdminFeaturedRoute
+  '/admin/homepage': typeof AuthenticatedAdminAdminHomepageRoute
   '/admin/inquiries': typeof AuthenticatedAdminAdminInquiriesRoute
   '/admin/properties': typeof AuthenticatedAdminAdminPropertiesRoute
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
@@ -177,6 +188,7 @@ export interface FileRoutesById {
   '/_authenticated/_admin/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
   '/_authenticated/_admin/admin/dashboard': typeof AuthenticatedAdminAdminDashboardRoute
   '/_authenticated/_admin/admin/featured': typeof AuthenticatedAdminAdminFeaturedRoute
+  '/_authenticated/_admin/admin/homepage': typeof AuthenticatedAdminAdminHomepageRoute
   '/_authenticated/_admin/admin/inquiries': typeof AuthenticatedAdminAdminInquiriesRoute
   '/_authenticated/_admin/admin/properties': typeof AuthenticatedAdminAdminPropertiesRoute
   '/_authenticated/_admin/admin/users': typeof AuthenticatedAdminAdminUsersRoute
@@ -197,6 +209,7 @@ export interface FileRouteTypes {
     | '/admin/add-property'
     | '/admin/dashboard'
     | '/admin/featured'
+    | '/admin/homepage'
     | '/admin/inquiries'
     | '/admin/properties'
     | '/admin/users'
@@ -215,6 +228,7 @@ export interface FileRouteTypes {
     | '/admin/add-property'
     | '/admin/dashboard'
     | '/admin/featured'
+    | '/admin/homepage'
     | '/admin/inquiries'
     | '/admin/properties'
     | '/admin/users'
@@ -235,6 +249,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_admin/admin/add-property'
     | '/_authenticated/_admin/admin/dashboard'
     | '/_authenticated/_admin/admin/featured'
+    | '/_authenticated/_admin/admin/homepage'
     | '/_authenticated/_admin/admin/inquiries'
     | '/_authenticated/_admin/admin/properties'
     | '/_authenticated/_admin/admin/users'
@@ -379,11 +394,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminAddPropertyRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/_admin/admin/homepage': {
+      id: '/_authenticated/_admin/admin/homepage'
+      path: '/admin/homepage'
+      fullPath: '/admin/homepage'
+      preLoaderRoute: typeof AuthenticatedAdminAdminHomepageRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
   }
 }
 
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAdminAddPropertyRoute: typeof AuthenticatedAdminAdminAddPropertyRoute
+  AuthenticatedAdminAdminHomepageRoute: typeof AuthenticatedAdminAdminHomepageRoute
   AuthenticatedAdminAdminDashboardRoute: typeof AuthenticatedAdminAdminDashboardRoute
   AuthenticatedAdminAdminFeaturedRoute: typeof AuthenticatedAdminAdminFeaturedRoute
   AuthenticatedAdminAdminInquiriesRoute: typeof AuthenticatedAdminAdminInquiriesRoute
@@ -394,6 +417,7 @@ interface AuthenticatedAdminRouteChildren {
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminAdminAddPropertyRoute:
     AuthenticatedAdminAdminAddPropertyRoute,
+  AuthenticatedAdminAdminHomepageRoute: AuthenticatedAdminAdminHomepageRoute,
   AuthenticatedAdminAdminDashboardRoute: AuthenticatedAdminAdminDashboardRoute,
   AuthenticatedAdminAdminFeaturedRoute: AuthenticatedAdminAdminFeaturedRoute,
   AuthenticatedAdminAdminInquiriesRoute: AuthenticatedAdminAdminInquiriesRoute,

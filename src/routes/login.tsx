@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,21 +12,30 @@ export const Route = createFileRoute("/login")({
 });
 
 function Login() {
-  const { signIn } = useAuth();
+  const { signIn, user, role, loading } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [didSignIn, setDidSignIn] = useState(false);
+
+  // Once auth state resolves after sign-in, redirect to the correct portal
+  useEffect(() => {
+    if (!didSignIn || loading || !user) return;
+    if (role === "admin") navigate({ to: "/admin/dashboard" });
+    else if (role === "agent") navigate({ to: "/agent" });
+    else navigate({ to: "/dashboard" });
+  }, [didSignIn, loading, user, role, navigate]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setSubmitting(true);
     const { error } = await signIn(email.trim(), password);
-    setLoading(false);
+    setSubmitting(false);
     if (error) { toast.error(error); return; }
     toast.success("Welcome back!");
-    navigate({ to: "/dashboard" });
+    setDidSignIn(true);
   };
 
   return (
@@ -71,7 +80,6 @@ function Login() {
       {/* Right form panel */}
       <div className="flex flex-1 flex-col items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm">
-          {/* Mobile logo */}
           <div className="lg:hidden mb-8 flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Leaf className="h-4 w-4" />
@@ -128,13 +136,13 @@ function Login() {
             </div>
             <Button
               type="submit"
-              className="w-full h-11 gap-2 font-semibold text-sm shadow-sm hover:shadow-md transition-shadow"
-              disabled={loading}
+              className="w-full h-11 gap-2 font-semibold text-sm"
+              disabled={submitting || didSignIn}
             >
-              {loading ? (
+              {submitting || didSignIn ? (
                 <span className="flex items-center gap-2">
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  Signing in…
+                  {didSignIn ? "Redirecting…" : "Signing in…"}
                 </span>
               ) : (
                 <span className="flex items-center gap-2">Sign in <ArrowRight className="h-4 w-4" /></span>

@@ -3,7 +3,7 @@ import { createFileRoute, Outlet, useNavigate, Link, useRouterState } from "@tan
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  Loader2, LayoutDashboard, Building2, Users, Inbox, Star, LogOut,
+  Loader2, LayoutDashboard, Globe, Building2, Users, Inbox, Star, LogOut,
   Bell, Search, Menu, X, Leaf, ChevronRight, Settings, ExternalLink,
   PlusCircle
 } from "lucide-react";
@@ -21,6 +21,7 @@ const NAV = [
   { to: "/admin/add-property", label: "Add Property", icon: PlusCircle, desc: "Create a new listing" },
   { to: "/admin/users", label: "Users", icon: Users, desc: "User management" },
   { to: "/admin/featured", label: "Featured", icon: Star, desc: "Featured listings" },
+  { to: "/admin/homepage", label: "Homepage", icon: Globe, desc: "Edit homepage sections" },
   { to: "/admin/inquiries", label: "Inquiries", icon: Inbox, desc: "Messages & leads" },
 ];
 

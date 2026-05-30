@@ -14,7 +14,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatPrice } from "@/lib/format";
 import { PROPERTY_FEATURES } from "@/lib/constants";
 import { PropertyGrid } from "@/components/property/PropertyGrid";
-import { PropertyMap } from "@/components/property/PropertyMap";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -144,19 +143,6 @@ function PropertyDetail() {
               {PROPERTY_FEATURES.slice(0, 6).map((f) => (
                 <Badge key={f} variant="secondary">{f}</Badge>
               ))}
-            </div>
-          </section>
-
-          {/* Map */}
-          <section className="mt-8">
-            <h2 className="text-xl font-bold">Location</h2>
-            <div className="mt-3">
-              <PropertyMap
-                address={property.address}
-                city={property.city}
-                state={property.state}
-                zip={property.zip_code}
-              />
             </div>
           </section>
         </div>

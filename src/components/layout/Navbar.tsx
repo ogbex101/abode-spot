@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Heart, Menu, Leaf, LogOut, User as UserIcon, LayoutDashboard, Plus, X, Search } from "lucide-react";
+import { Heart, Menu, Leaf, LogOut, User as UserIcon, LayoutDashboard, Plus, X, Search, Home, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useSavedIds } from "@/hooks/useFavorites";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 export function Navbar() {
@@ -23,6 +23,7 @@ export function Navbar() {
   const { data: savedIds = [] } = useSavedIds();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -30,12 +31,42 @@ export function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [path]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMobileOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [mobileOpen]);
+
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileOpen]);
+
   if (path.startsWith("/admin")) return null;
 
   const initials = (user?.email ?? "U").slice(0, 2).toUpperCase();
 
+  const close = () => setMobileOpen(false);
+
   return (
     <header
+      ref={menuRef}
       className={cn(
         "sticky top-0 z-40 transition-all duration-300",
         scrolled
@@ -45,7 +76,7 @@ export function Navbar() {
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6">
         {/* Logo */}
-        <Link to="/" className="group flex items-center gap-2">
+        <Link to="/" className="group flex items-center gap-2" onClick={close}>
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-transform duration-200 group-hover:scale-105">
             <Leaf className="h-4 w-4" />
           </div>
@@ -81,15 +112,15 @@ export function Navbar() {
           )}
           <Link to="/properties" className="relative">
             <Button variant="ghost" size="icon" aria-label="Search properties">
-              <Search className="h-4.5 w-4.5" />
+              <Search className="h-4 w-4" />
             </Button>
           </Link>
           <Link to="/dashboard" className="relative">
             <Button variant="ghost" size="icon" aria-label="Saved properties">
-              <Heart className="h-4.5 w-4.5" />
+              <Heart className="h-4 w-4" />
             </Button>
             {savedIds.length > 0 && (
-              <Badge className="absolute -right-1 -top-1 h-4.5 min-w-4.5 rounded-full px-1 text-[10px] font-bold">
+              <Badge className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full px-1 text-[10px] font-bold">
                 {savedIds.length}
               </Badge>
             )}
@@ -115,6 +146,11 @@ export function Navbar() {
                 {role === "admin" && (
                   <DropdownMenuItem onClick={() => navigate({ to: "/admin/dashboard" })} className="gap-2 cursor-pointer">
                     <LayoutDashboard className="h-4 w-4" /> Admin Dashboard
+                  </DropdownMenuItem>
+                )}
+                {role === "agent" && (
+                  <DropdownMenuItem onClick={() => navigate({ to: "/agent" })} className="gap-2 cursor-pointer">
+                    <Building2 className="h-4 w-4" /> Agent Portal
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={() => navigate({ to: "/dashboard" })} className="gap-2 cursor-pointer">
@@ -145,51 +181,94 @@ export function Navbar() {
         </div>
 
         {/* Mobile Menu Toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="md:hidden"
+        <button
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg hover:bg-muted transition-colors md:hidden"
           onClick={() => setMobileOpen((o) => !o)}
-          aria-label="Menu"
+          aria-label={mobileOpen ? "Close menu" : "Open menu"}
+          aria-expanded={mobileOpen}
         >
           {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
+        </button>
       </div>
 
-      {/* Mobile Menu */}
-      {mobileOpen && (
-        <div className="border-t bg-background/98 backdrop-blur-xl md:hidden animate-fade-up">
-          <div className="mx-auto flex max-w-7xl flex-col gap-1 p-4">
-            <MobLink to="/" label="Home" onClick={() => setMobileOpen(false)} />
-            <MobLink to="/properties" label="Properties" onClick={() => setMobileOpen(false)} />
-            <MobLink to="/dashboard" label="My Dashboard" onClick={() => setMobileOpen(false)} />
-            {role === "agent" && (
-              <MobLink to="/agent" label="Agent Portal" onClick={() => setMobileOpen(false)} />
-            )}
-            {role === "admin" && (
-              <MobLink to="/admin/dashboard" label="Admin" onClick={() => setMobileOpen(false)} />
-            )}
+      {/* Mobile Menu — full-width panel below the header */}
+      <div
+        className={cn(
+          "md:hidden overflow-hidden transition-all duration-300 ease-in-out border-t bg-background",
+          mobileOpen ? "max-h-[100vh] opacity-100" : "max-h-0 opacity-0 pointer-events-none border-transparent"
+        )}
+      >
+        <nav className="mx-auto flex max-w-7xl flex-col px-4 py-3 pb-6 gap-0.5">
+          {/* Primary nav links */}
+          <MobLink to="/" label="Home" icon={<Home className="h-4 w-4" />} active={path === "/"} onClick={close} />
+          <MobLink to="/properties" label="Properties" icon={<Search className="h-4 w-4" />} active={path === "/properties"} onClick={close} />
+          {role === "agent" && (
+            <MobLink to="/agent" label="Agent Portal" icon={<Building2 className="h-4 w-4" />} active={path.startsWith("/agent")} onClick={close} />
+          )}
+          {role === "admin" && (
+            <MobLink to="/admin/dashboard" label="Admin Panel" icon={<LayoutDashboard className="h-4 w-4" />} active={path.startsWith("/admin")} onClick={close} />
+          )}
+          {user && (
+            <MobLink to="/dashboard" label="My Dashboard" icon={<UserIcon className="h-4 w-4" />} active={path === "/dashboard"} onClick={close} />
+          )}
+          {user && (
+            <MobLink
+              to="/dashboard"
+              label={`Saved${savedIds.length > 0 ? ` (${savedIds.length})` : ""}`}
+              icon={<Heart className="h-4 w-4" />}
+              active={false}
+              onClick={close}
+              search={{ tab: "saved" } as never}
+            />
+          )}
+
+          <div className="mt-4 border-t pt-4">
             {!user ? (
-              <div className="mt-3 flex gap-2">
-                <Button className="flex-1" variant="outline" onClick={() => { setMobileOpen(false); navigate({ to: "/login" }); }}>
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1"
+                  variant="outline"
+                  onClick={() => { close(); navigate({ to: "/login" }); }}
+                >
                   Login
                 </Button>
-                <Button className="flex-1" onClick={() => { setMobileOpen(false); navigate({ to: "/register" }); }}>
+                <Button
+                  className="flex-1"
+                  onClick={() => { close(); navigate({ to: "/register" }); }}
+                >
                   Sign up
                 </Button>
               </div>
             ) : (
-              <Button
-                variant="outline"
-                className="mt-3 gap-2"
-                onClick={async () => { setMobileOpen(false); await signOut(); navigate({ to: "/" }); }}
-              >
-                <LogOut className="h-4 w-4" /> Sign out
-              </Button>
+              <div className="space-y-2">
+                {user && (
+                  <Button
+                    className="w-full gap-2"
+                    variant="outline"
+                    onClick={() => { close(); navigate({ to: "/agent" }); }}
+                  >
+                    <Plus className="h-4 w-4" /> List a Property
+                  </Button>
+                )}
+                <div className="flex items-center justify-between px-1 py-2">
+                  <div>
+                    <div className="text-sm font-medium">{user.email}</div>
+                    <div className="text-xs text-muted-foreground capitalize">{role}</div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2 text-destructive hover:text-destructive"
+                    onClick={async () => { close(); await signOut(); navigate({ to: "/" }); }}
+                  >
+                    <LogOut className="h-4 w-4" /> Sign out
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
-        </div>
-      )}
+        </nav>
+      </div>
     </header>
   );
 }
@@ -210,9 +289,29 @@ function NavLink({ to, label, active }: { to: string; label: string; active: boo
   );
 }
 
-function MobLink({ to, label, onClick }: { to: string; label: string; onClick: () => void }) {
+function MobLink({
+  to, label, icon, active, onClick, search,
+}: {
+  to: string;
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+  onClick: () => void;
+  search?: Record<string, unknown>;
+}) {
   return (
-    <Link to={to} onClick={onClick} className="rounded-lg px-4 py-3 text-sm font-medium text-foreground hover:bg-muted transition-colors">
+    <Link
+      to={to}
+      search={search as never}
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors",
+        active
+          ? "bg-primary/8 text-primary"
+          : "text-foreground hover:bg-muted"
+      )}
+    >
+      <span className={cn("shrink-0", active ? "text-primary" : "text-muted-foreground")}>{icon}</span>
       {label}
     </Link>
   );

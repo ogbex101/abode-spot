@@ -37,6 +37,7 @@ function DashboardPage() {
 
   useEffect(() => {
     if (role === "admin") navigate({ to: "/admin/dashboard" });
+    else if (role === "agent") navigate({ to: "/agent" });
   }, [role, navigate]);
 
   const unreadCount = (inquiries.data ?? []).filter((i) => i.status === "unread").length;
