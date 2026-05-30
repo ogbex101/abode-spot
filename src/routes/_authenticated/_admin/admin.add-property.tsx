@@ -13,7 +13,7 @@ import { PROPERTY_TYPES } from "@/lib/constants";
 import { toast } from "sonner";
 import type { PropertyType, ListingType, PropertyStatus } from "@/lib/types";
 
-export const Route = createFileRoute("/_authenticated/_admin/admin/add-property")({
+export const Route = createFileRoute("/_authenticated/_admin/admin/add-property" as string)({
   component: AdminAddProperty,
 });
 
