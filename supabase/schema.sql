@@ -145,10 +145,13 @@ drop policy if exists "users_insert_self" on public.users;
 create policy "users_insert_self" on public.users for insert
   with check (id = auth.uid());
 
--- user_roles: read own, admin manage all
+-- user_roles: read own, admin manage all, users can insert their own role
 drop policy if exists "ur_read_own" on public.user_roles;
 create policy "ur_read_own" on public.user_roles for select
   using (user_id = auth.uid() or public.has_role(auth.uid(),'admin'));
+drop policy if exists "ur_insert_self" on public.user_roles;
+create policy "ur_insert_self" on public.user_roles for insert
+  with check (user_id = auth.uid());
 drop policy if exists "ur_admin_all" on public.user_roles;
 create policy "ur_admin_all" on public.user_roles for all
   using (public.has_role(auth.uid(),'admin'))

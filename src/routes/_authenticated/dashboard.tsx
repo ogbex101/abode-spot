@@ -3,18 +3,19 @@ import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Heart, Inbox, User as UserIcon, Settings, Home, ArrowRight,
-  Bell, TrendingUp, Eye, Star, MapPin, Building2, Phone, ChevronRight, Plus
+  TrendingUp, Building2, ChevronRight, Plus, Phone, Mail,
+  Star, Loader2, Save, CheckCircle2
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useSavedProperties } from "@/hooks/useFavorites";
 import { useInquiries } from "@/hooks/useInquiries";
 import { PropertyGrid } from "@/components/property/PropertyGrid";
 import { EmptyState } from "@/components/common/EmptyState";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatDate, truncate } from "@/lib/format";
 
@@ -28,7 +29,7 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 function DashboardPage() {
-  const { user, profile, role, refreshProfile } = useAuth();
+  const { user, profile, role, loading, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const sp = Route.useSearch();
   const [tab, setTab] = useState(sp.tab ?? "overview");
@@ -36,9 +37,18 @@ function DashboardPage() {
   const inquiries = useInquiries({ scope: "user" });
 
   useEffect(() => {
+    if (loading) return;
     if (role === "admin") navigate({ to: "/admin/dashboard" });
     else if (role === "agent") navigate({ to: "/agent" });
-  }, [role, navigate]);
+  }, [role, loading, navigate]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   const unreadCount = (inquiries.data ?? []).filter((i) => i.status === "unread").length;
   const displayName = profile?.full_name ? profile.full_name.split(" ")[0] : "there";
@@ -46,56 +56,59 @@ function DashboardPage() {
     ? profile.full_name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
     : (user?.email ?? "U").slice(0, 2).toUpperCase();
 
+  const TABS = [
+    { value: "overview", icon: <Home className="h-4 w-4" />, label: "Overview" },
+    { value: "saved", icon: <Heart className="h-4 w-4" />, label: "Saved", count: saved.data?.length },
+    { value: "inquiries", icon: <Inbox className="h-4 w-4" />, label: "Inquiries", count: unreadCount || undefined },
+    { value: "profile", icon: <Settings className="h-4 w-4" />, label: "Profile" },
+  ];
+
   return (
     <div className="min-h-screen bg-muted/20">
-      {/* Header banner */}
+      {/* Header */}
       <div className="bg-primary text-primary-foreground">
         <div className="mx-auto max-w-7xl px-4 py-8 md:px-6 md:py-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="h-14 w-14 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center text-lg font-bold">
+              <div className="h-14 w-14 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center text-lg font-bold shrink-0">
                 {initials}
               </div>
               <div>
                 <p className="text-sm text-primary-foreground/60 mb-0.5">Welcome back,</p>
                 <h1 className="text-2xl font-bold" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
-                  {displayName}! 👋
+                  {displayName}
                 </h1>
-                <p className="text-sm text-primary-foreground/60 mt-0.5">{user?.email}</p>
               </div>
             </div>
-            <div className="hidden md:flex items-center gap-3">
-              {unreadCount > 0 && (
-                <div className="flex items-center gap-2 bg-white/15 rounded-full px-4 py-2 text-sm">
-                  <Bell className="h-4 w-4" />
-                  <span>{unreadCount} new message{unreadCount > 1 ? "s" : ""}</span>
-                </div>
-              )}
-              <Button variant="secondary" size="sm" className="gap-2" onClick={() => navigate({ to: "/properties" })}>
-                <Building2 className="h-4 w-4" /> Browse properties
+            <div className="hidden sm:flex items-center gap-2">
+              <Button variant="secondary" size="sm" className="gap-2" onClick={() => navigate({ to: "/agent" })}>
+                <Plus className="h-3.5 w-3.5" /> List Property
               </Button>
+              <Link to="/properties">
+                <Button variant="outline" size="sm" className="bg-white/10 border-white/20 text-white hover:bg-white/20 gap-2">
+                  <Building2 className="h-3.5 w-3.5" /> Browse
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Content */}
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="mb-8 h-auto bg-transparent p-0 gap-1 flex flex-wrap">
-            {[
-              { value: "overview", icon: <Home className="h-4 w-4" />, label: "Overview" },
-              { value: "saved", icon: <Heart className="h-4 w-4" />, label: "Saved", count: saved.data?.length },
-              { value: "inquiries", icon: <Inbox className="h-4 w-4" />, label: "Inquiries", count: unreadCount, accent: true },
-              { value: "profile", icon: <Settings className="h-4 w-4" />, label: "Profile" },
-            ].map((t) => (
+          <TabsList className="mb-6 flex-wrap h-auto gap-1 bg-card border rounded-2xl p-1.5 shadow-sm">
+            {TABS.map((t) => (
               <TabsTrigger
                 key={t.value}
                 value={t.value}
-                className="relative gap-2 rounded-xl px-5 py-2.5 text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary border border-transparent data-[state=active]:border-border"
+                className="relative gap-2 rounded-xl data-[state=active]:shadow-sm"
               >
-                {t.icon} {t.label}
-                {(t.count ?? 0) > 0 && (
-                  <span className={`inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1 text-[10px] font-bold ml-0.5 ${t.accent ? "bg-destructive text-destructive-foreground" : "bg-primary/15 text-primary"}`}>
+                {t.icon}
+                <span className="hidden sm:inline">{t.label}</span>
+                <span className="sm:hidden">{t.label}</span>
+                {t.count != null && t.count > 0 && (
+                  <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
                     {t.count}
                   </span>
                 )}
@@ -103,7 +116,7 @@ function DashboardPage() {
             ))}
           </TabsList>
 
-          {/* Overview */}
+          {/* ── OVERVIEW ── */}
           <TabsContent value="overview" className="mt-0">
             <div className="grid gap-4 sm:grid-cols-3 mb-8">
               <StatCard
@@ -111,29 +124,28 @@ function DashboardPage() {
                 value={saved.data?.length ?? 0}
                 icon={<Heart className="h-5 w-5" />}
                 sub="Properties you loved"
-                color="text-rose-500 bg-rose-50"
+                color="text-rose-500 bg-rose-50 dark:bg-rose-950"
                 onClick={() => setTab("saved")}
               />
               <StatCard
                 label="Inquiries Sent"
                 value={inquiries.data?.length ?? 0}
                 icon={<Inbox className="h-5 w-5" />}
-                sub={`${unreadCount} awaiting reply`}
-                color="text-blue-500 bg-blue-50"
+                sub={unreadCount > 0 ? `${unreadCount} awaiting reply` : "All caught up"}
+                color="text-blue-500 bg-blue-50 dark:bg-blue-950"
                 onClick={() => setTab("inquiries")}
               />
               <StatCard
                 label="Account Type"
                 value={role ?? "user"}
                 icon={<UserIcon className="h-5 w-5" />}
-                sub="Verified member"
+                sub="Active member"
                 color="text-primary bg-primary/10"
                 onClick={() => setTab("profile")}
                 capitalize
               />
             </div>
 
-            {/* Activity feed */}
             <div className="grid md:grid-cols-3 gap-6">
               <div className="md:col-span-2">
                 <div className="flex items-center justify-between mb-4">
@@ -144,68 +156,68 @@ function DashboardPage() {
                 </div>
                 {(saved.data ?? []).length === 0 && !saved.isLoading ? (
                   <div className="rounded-2xl border bg-card p-8 text-center">
-                    <Heart className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+                    <Heart className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
                     <p className="font-medium text-muted-foreground mb-4">No saved properties yet</p>
                     <Button size="sm" variant="outline" onClick={() => navigate({ to: "/properties" })}>
                       Browse properties
                     </Button>
                   </div>
                 ) : (
-                  <PropertyGrid
-                    properties={(saved.data ?? []).slice(0, 3)}
-                    loading={saved.isLoading}
-                  />
+                  <PropertyGrid properties={(saved.data ?? []).slice(0, 3)} loading={saved.isLoading} />
                 )}
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold">Recent activity</h2>
-                </div>
-                <div className="rounded-2xl border bg-card divide-y overflow-hidden">
-                  {(inquiries.data ?? []).slice(0, 4).length === 0 ? (
-                    <div className="p-6 text-center">
-                      <TrendingUp className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
-                      <p className="text-sm text-muted-foreground">Your activity will appear here</p>
-                    </div>
-                  ) : (
-                    (inquiries.data ?? []).slice(0, 4).map((inq) => (
-                      <div key={inq.id} className="p-4 hover:bg-muted/30 transition-colors">
-                        <div className="flex items-start gap-3">
-                          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                            <Inbox className="h-4 w-4 text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{inq.property?.title ?? "Property inquiry"}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{truncate(inq.message, 40)}</p>
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <InquiryBadge status={inq.status} />
-                              <span className="text-xs text-muted-foreground">{formatDate(inq.created_at)}</span>
+              <div className="space-y-4">
+                {/* Recent inquiries */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-base font-bold">Recent Inquiries</h2>
+                  </div>
+                  <div className="rounded-2xl border bg-card divide-y overflow-hidden">
+                    {(inquiries.data ?? []).length === 0 ? (
+                      <div className="p-5 text-center">
+                        <TrendingUp className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
+                        <p className="text-sm text-muted-foreground">No inquiries yet</p>
+                      </div>
+                    ) : (
+                      (inquiries.data ?? []).slice(0, 4).map((inq) => (
+                        <div key={inq.id} className="p-3 hover:bg-muted/30 transition-colors">
+                          <div className="flex items-start gap-2.5">
+                            <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                              <Inbox className="h-3.5 w-3.5 text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{(inq.property as { title?: string } | null)?.title ?? "Property inquiry"}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{truncate(inq.message, 40)}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <InquiryBadge status={inq.status} />
+                                <span className="text-xs text-muted-foreground">{formatDate(inq.created_at)}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))
-                  )}
-                  {(inquiries.data ?? []).length > 4 && (
-                    <button onClick={() => setTab("inquiries")} className="w-full p-3 text-sm text-primary hover:bg-muted/30 transition-colors flex items-center justify-center gap-1">
-                      View all inquiries <ArrowRight className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+                      ))
+                    )}
+                    {(inquiries.data ?? []).length > 4 && (
+                      <button onClick={() => setTab("inquiries")} className="w-full p-3 text-sm text-primary hover:bg-muted/30 transition-colors flex items-center justify-center gap-1">
+                        View all <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Quick links */}
-                <div className="mt-4 rounded-2xl border bg-card p-4 space-y-2">
+                <div className="rounded-2xl border bg-card p-4 space-y-1">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Quick Links</p>
                   {[
-                    { label: "Browse all properties", icon: <Building2 className="h-4 w-4" />, to: "/properties" },
-                    { label: "List a property", icon: <Plus className="h-4 w-4" />, to: "/agent" },
-                    { label: "Saved favourites", icon: <Heart className="h-4 w-4" />, to: "/dashboard", tab: "saved" },
-                    { label: "Update profile", icon: <UserIcon className="h-4 w-4" />, to: "/dashboard", tab: "profile" },
+                    { label: "Browse all properties", icon: <Building2 className="h-4 w-4" />, action: () => navigate({ to: "/properties" }) },
+                    { label: "List a property", icon: <Plus className="h-4 w-4" />, action: () => navigate({ to: "/agent" }) },
+                    { label: "Saved favourites", icon: <Heart className="h-4 w-4" />, action: () => setTab("saved") },
+                    { label: "Update profile", icon: <UserIcon className="h-4 w-4" />, action: () => setTab("profile") },
                   ].map((link, i) => (
                     <button
                       key={i}
-                      onClick={() => link.tab ? setTab(link.tab) : navigate({ to: link.to as "/" })}
+                      onClick={link.action}
                       className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-muted/50 text-left transition-colors"
                     >
                       <span className="text-primary">{link.icon}</span>
@@ -218,63 +230,88 @@ function DashboardPage() {
             </div>
           </TabsContent>
 
-          {/* Saved */}
+          {/* ── SAVED ── */}
           <TabsContent value="saved" className="mt-0">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-xl font-bold">Saved Properties</h2>
               <Badge variant="secondary">{saved.data?.length ?? 0} properties</Badge>
             </div>
-            <PropertyGrid
-              properties={saved.data ?? []}
-              loading={saved.isLoading}
-              emptyTitle="No saved properties"
-              emptyDescription="Tap the heart on any listing to save it here."
-            />
+            {saved.isLoading ? (
+              <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            ) : (saved.data ?? []).length === 0 ? (
+              <EmptyState
+                icon={<Heart className="h-6 w-6 text-muted-foreground" />}
+                title="No saved properties"
+                description="Tap the heart on any listing to save it here."
+              />
+            ) : (
+              <PropertyGrid properties={saved.data ?? []} loading={false} />
+            )}
           </TabsContent>
 
-          {/* Inquiries */}
+          {/* ── INQUIRIES ── */}
           <TabsContent value="inquiries" className="mt-0">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-xl font-bold">My Inquiries</h2>
-              {unreadCount > 0 && <Badge className="bg-destructive text-destructive-foreground">{unreadCount} unread</Badge>}
+              <Badge variant="secondary">{inquiries.data?.length ?? 0} total</Badge>
             </div>
             {inquiries.isLoading ? (
-              <div className="h-24 animate-pulse rounded-2xl bg-muted" />
+              <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
             ) : (inquiries.data ?? []).length === 0 ? (
-              <EmptyState title="No inquiries yet" description="Reach out to agents from any property page." />
+              <EmptyState
+                icon={<Inbox className="h-6 w-6 text-muted-foreground" />}
+                title="No inquiries yet"
+                description="Reach out to agents from any property page."
+              />
             ) : (
               <div className="rounded-2xl border bg-card overflow-hidden">
-                <div className="hidden md:grid grid-cols-[2fr_3fr_1fr_1fr] gap-4 px-5 py-3 bg-muted/50 text-xs uppercase text-muted-foreground font-semibold tracking-wide">
-                  <span>Property</span><span>Message</span><span>Date</span><span>Status</span>
-                </div>
-                {(inquiries.data ?? []).map((inq) => (
-                  <div key={inq.id} className="border-t px-5 py-4 hover:bg-muted/20 transition-colors">
-                    <div className="grid md:grid-cols-[2fr_3fr_1fr_1fr] gap-2 md:gap-4 items-start">
-                      <div>
-                        <p className="font-medium text-sm">{inq.property?.title ?? "—"}</p>
-                        {inq.property?.city && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                            <MapPin className="h-3 w-3" />{inq.property.city}
-                          </p>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">{truncate(inq.message, 80)}</p>
-                      <p className="text-sm text-muted-foreground">{formatDate(inq.created_at)}</p>
-                      <InquiryBadge status={inq.status} />
-                    </div>
-                  </div>
-                ))}
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3">Property</th>
+                      <th className="px-4 py-3 hidden sm:table-cell">Message</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 hidden md:table-cell">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(inquiries.data ?? []).map((inq) => (
+                      <tr key={inq.id} className="border-t hover:bg-muted/30 transition-colors align-top">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            {(inq.property as { images?: string[] } | null)?.images?.[0] && (
+                              <img src={(inq.property as { images?: string[] }).images![0]} alt="" className="h-9 w-12 rounded-lg object-cover shrink-0 hidden sm:block" />
+                            )}
+                            <div>
+                              {(inq.property as { id?: string; title?: string } | null)?.id ? (
+                                <Link to="/property/$id" params={{ id: (inq.property as { id: string }).id }} className="font-medium hover:underline line-clamp-1">
+                                  {(inq.property as { title?: string }).title ?? "Property"}
+                                </Link>
+                              ) : (
+                                <span className="font-medium">Property removed</span>
+                              )}
+                              <div className="text-xs text-muted-foreground">{(inq.property as { city?: string } | null)?.city ?? ""}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground max-w-xs hidden sm:table-cell">
+                          {truncate(inq.message, 60)}
+                        </td>
+                        <td className="px-4 py-3"><InquiryBadge status={inq.status} /></td>
+                        <td className="px-4 py-3 text-muted-foreground whitespace-nowrap hidden md:table-cell">
+                          {formatDate(inq.created_at)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </TabsContent>
 
-          {/* Profile */}
+          {/* ── PROFILE ── */}
           <TabsContent value="profile" className="mt-0">
-            <div className="mb-6">
-              <h2 className="text-xl font-bold">My Profile</h2>
-              <p className="text-muted-foreground text-sm mt-1">Manage your personal information</p>
-            </div>
-            <ProfileForm onSaved={refreshProfile} user={user} profile={profile} role={role} />
+            <ProfileForm user={user} profile={profile} role={role} onSaved={refreshProfile} />
           </TabsContent>
         </Tabs>
       </div>
@@ -282,139 +319,233 @@ function DashboardPage() {
   );
 }
 
-
-function StatCard({
-  label, value, icon, sub, color, onClick, capitalize
+// ── Profile Form ──────────────────────────────────────────────────────────────
+function ProfileForm({
+  user, profile, role, onSaved,
 }: {
-  label: string; value: string | number; icon: React.ReactNode; sub?: string;
-  color?: string; onClick?: () => void; capitalize?: boolean;
+  user: ReturnType<typeof useAuth>["user"];
+  profile: ReturnType<typeof useAuth>["profile"];
+  role: ReturnType<typeof useAuth>["role"];
+  onSaved: () => Promise<void>;
+}) {
+  const [fullName, setFullName] = useState(profile?.full_name ?? "");
+  const [phone, setPhone] = useState(profile?.phone ?? "");
+  const [company, setCompany] = useState(profile?.company_name ?? "");
+  const [loading, setLoading] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Sync when profile loads (async)
+  useEffect(() => {
+    setFullName(profile?.full_name ?? "");
+    setPhone(profile?.phone ?? "");
+    setCompany(profile?.company_name ?? "");
+  }, [profile]);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return toast.error("Not signed in");
+
+    setLoading(true);
+    try {
+      if (!isSupabaseConfigured || !supabase) {
+        // Mock mode: just update in memory
+        await new Promise((r) => setTimeout(r, 500));
+        toast.success("Profile saved! (mock mode — changes won't persist after refresh)");
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+        setLoading(false);
+        return;
+      }
+
+      const updateData: Record<string, string> = {
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+      };
+      if (role === "agent") {
+        updateData.company_name = company.trim();
+      }
+
+      const { error } = await supabase
+        .from("users")
+        .update(updateData)
+        .eq("id", user.id);
+
+      if (error) {
+        toast.error(error.message);
+        setLoading(false);
+        return;
+      }
+
+      toast.success("Profile saved successfully!");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+      await onSaved();
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="grid md:grid-cols-3 gap-6">
+      <form className="md:col-span-2 rounded-2xl border bg-card p-6 space-y-5" onSubmit={handleSave}>
+        <h3 className="font-semibold text-lg">Personal Information</h3>
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="fullName">Full name</Label>
+            <Input
+              id="fullName"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value.slice(0, 100))}
+              placeholder="Your full name"
+              autoComplete="name"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="phone">Phone number</Label>
+            <Input
+              id="phone"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.slice(0, 40))}
+              placeholder="+234 800 000 0000"
+              autoComplete="tel"
+            />
+          </div>
+        </div>
+
+        {role === "agent" && (
+          <div className="space-y-2">
+            <Label htmlFor="company">Company / Agency name</Label>
+            <Input
+              id="company"
+              value={company}
+              onChange={(e) => setCompany(e.target.value.slice(0, 100))}
+              placeholder="e.g. Okafor Realty Group"
+            />
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="email">Email address</Label>
+          <Input
+            id="email"
+            value={user?.email ?? ""}
+            disabled
+            className="bg-muted/50 cursor-not-allowed"
+          />
+          <p className="text-xs text-muted-foreground">Email is managed through your account settings.</p>
+        </div>
+
+        <div className="pt-1">
+          <Button type="submit" disabled={loading || saved} className="gap-2 min-w-32">
+            {loading ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
+            ) : saved ? (
+              <><CheckCircle2 className="h-4 w-4" /> Saved!</>
+            ) : (
+              <><Save className="h-4 w-4" /> Save changes</>
+            )}
+          </Button>
+        </div>
+      </form>
+
+      {/* Sidebar */}
+      <div className="space-y-4">
+        <div className="rounded-2xl border bg-card p-5">
+          <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-4">Account Details</h3>
+          <div className="space-y-3">
+            <InfoRow icon={<UserIcon className="h-4 w-4 text-primary" />} label="Account type" value={<span className="capitalize font-medium">{role}</span>} />
+            <InfoRow icon={<CheckCircle2 className="h-4 w-4 text-success" />} label="Status" value={<span className="text-success font-medium">Active</span>} />
+            {profile?.phone && (
+              <InfoRow icon={<Phone className="h-4 w-4 text-accent" />} label="Phone" value={profile.phone} />
+            )}
+            {user?.email && (
+              <InfoRow icon={<Mail className="h-4 w-4 text-muted-foreground" />} label="Email" value={user.email} />
+            )}
+          </div>
+        </div>
+
+        {role === "agent" && (
+          <div className="rounded-2xl border bg-card p-5">
+            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">Agent Tools</h3>
+            <div className="space-y-2">
+              <Link to="/agent" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-muted/50 transition-colors">
+                <Building2 className="h-4 w-4 text-primary" /> My Listings
+                <ChevronRight className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+              </Link>
+              <Link to="/agent/inquiries" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-muted/50 transition-colors">
+                <Inbox className="h-4 w-4 text-primary" /> Received Inquiries
+                <ChevronRight className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+              </Link>
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-2xl border bg-primary/5 border-primary/20 p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <Star className="h-4 w-4 text-accent" />
+            <h3 className="font-semibold text-sm">Want to list properties?</h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            {role === "agent"
+              ? "You already have agent access. Head to your portal to add listings."
+              : "Register as an agent to list properties, manage inquiries, and grow your business."}
+          </p>
+          <Link to="/agent">
+            <Button size="sm" variant="outline" className="w-full gap-2">
+              <Plus className="h-3.5 w-3.5" />
+              {role === "agent" ? "Go to Agent Portal" : "List a Property"}
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Small helpers ─────────────────────────────────────────────────────────────
+function StatCard({
+  label, value, icon, sub, color, onClick, capitalize,
+}: {
+  label: string; value: string | number; icon: React.ReactNode;
+  sub: string; color: string; onClick?: () => void; capitalize?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className="text-left rounded-2xl border bg-card p-5 hover:shadow-md transition-all hover:-translate-y-0.5 group"
+      className="rounded-2xl border bg-card p-5 text-left hover:shadow-md transition-all group w-full"
     >
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm text-muted-foreground">{label}</span>
-        <div className={`h-9 w-9 rounded-xl flex items-center justify-center ${color ?? "bg-primary/10 text-primary"}`}>
-          {icon}
-        </div>
+      <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl mb-3 ${color}`}>
+        {icon}
       </div>
-      <div className={`text-3xl font-bold ${capitalize ? "capitalize" : ""}`}>{value}</div>
-      {sub && <p className="text-xs text-muted-foreground mt-1.5">{sub}</p>}
+      <div className={`text-2xl font-bold mb-0.5 ${capitalize ? "capitalize" : ""}`}>{value}</div>
+      <div className="text-sm font-medium">{label}</div>
+      <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>
     </button>
   );
 }
 
-function InquiryBadge({ status }: { status: "unread" | "read" | "replied" }) {
-  const map = {
-    unread: "bg-warning/15 text-warning-foreground border-warning/30",
-    read: "bg-muted text-muted-foreground border-border",
-    replied: "bg-success/15 text-success border-success/30",
+function InquiryBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    unread: "bg-warning/15 text-warning-foreground",
+    read: "bg-muted text-muted-foreground",
+    replied: "bg-success/15 text-success",
   };
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${map[status]}`}>
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${map[status] ?? "bg-muted"}`}>
       {status}
     </span>
   );
 }
 
-function ProfileForm({ onSaved, user, profile, role }: {
-  onSaved: () => void;
-  user: ReturnType<typeof useAuth>["user"];
-  profile: ReturnType<typeof useAuth>["profile"];
-  role: ReturnType<typeof useAuth>["role"];
-}) {
-  const [fullName, setFullName] = useState(profile?.full_name ?? "");
-  const [phone, setPhone] = useState(profile?.phone ?? "");
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setFullName(profile?.full_name ?? "");
-    setPhone(profile?.phone ?? "");
-  }, [profile]);
-
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!supabase || !user) return toast.error("Not connected");
-    setLoading(true);
-    const { error } = await supabase
-      .from("users")
-      .update({ full_name: fullName.trim(), phone: phone.trim() })
-      .eq("id", user.id);
-    setLoading(false);
-    if (error) return toast.error(error.message);
-    toast.success("Profile saved!");
-    onSaved();
-  };
-
+function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
   return (
-    <div className="grid md:grid-cols-3 gap-6">
-      <form className="md:col-span-2 space-y-5 rounded-2xl border bg-card p-6" onSubmit={save}>
-        <h3 className="font-semibold mb-1">Personal Information</h3>
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Full name</Label>
-            <Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value.slice(0, 100))} placeholder="Your full name" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="phone">Phone number</Label>
-            <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value.slice(0, 40))} placeholder="+234 800 000 0000" />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="email">Email address</Label>
-          <Input id="email" value={user?.email ?? ""} disabled className="bg-muted/50" />
-          <p className="text-xs text-muted-foreground">Email cannot be changed here.</p>
-        </div>
-        <Button type="submit" disabled={loading} className="gap-2">
-          {loading ? "Saving…" : "Save changes"}
-        </Button>
-      </form>
-
-      {/* Account info sidebar */}
-      <div className="space-y-4">
-        <div className="rounded-2xl border bg-card p-5">
-          <h3 className="font-semibold mb-4 text-sm text-muted-foreground uppercase tracking-wide">Account Details</h3>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <UserIcon className="h-4 w-4 text-primary" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Account type</p>
-                <p className="text-sm font-medium capitalize">{role}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-success/10 flex items-center justify-center shrink-0">
-                <Star className="h-4 w-4 text-success" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Member status</p>
-                <p className="text-sm font-medium text-success">Verified</p>
-              </div>
-            </div>
-            {profile?.phone && (
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-accent/15 flex items-center justify-center shrink-0">
-                  <Phone className="h-4 w-4 text-accent" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Phone</p>
-                  <p className="text-sm font-medium">{profile.phone}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border bg-card p-5">
-          <h3 className="font-semibold mb-3 text-sm text-muted-foreground uppercase tracking-wide">Preferences</h3>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            More profile options like notification settings and saved searches are coming soon.
-          </p>
-        </div>
+    <div className="flex items-center gap-3">
+      <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0">{icon}</div>
+      <div>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-sm">{value}</p>
       </div>
     </div>
   );

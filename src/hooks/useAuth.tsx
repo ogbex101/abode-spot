@@ -90,36 +90,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp: AuthContextValue["signUp"] = async (email, password, fullName, desiredRole = "user") => {
     if (!supabase) return { error: "Supabase not configured", needsVerification: false };
 
-    // Sign up WITHOUT email confirmation — users get immediate access
+    // Sign up WITHOUT email confirmation — users get immediate access.
+    // Make sure "Enable email confirmations" is OFF in Supabase Dashboard > Auth > Settings.
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        // No emailRedirectTo so Supabase doesn't require email confirmation
         data: { full_name: fullName },
       },
     });
     if (error) return { error: error.message, needsVerification: false };
+    if (!data.user) return { error: "Signup failed — no user returned", needsVerification: false };
 
-    // Insert agent role immediately if requested
-    if (desiredRole === "agent" && data.user) {
+    // Wait a moment for the DB trigger to create the users row
+    await new Promise((r) => setTimeout(r, 800));
+
+    // Upsert the user profile (trigger may have already created it)
+    await supabase.from("users").upsert(
+      {
+        id: data.user.id,
+        email,
+        full_name: fullName,
+        role: desiredRole,
+        is_verified: true,
+      },
+      { onConflict: "id" }
+    );
+
+    // Assign the correct role in user_roles
+    if (desiredRole === "agent") {
+      // First ensure the default 'user' row exists (from trigger)
+      await supabase
+        .from("user_roles")
+        .upsert({ user_id: data.user.id, role: "user" }, { onConflict: "user_id,role" });
+      // Then add the agent role
       await supabase
         .from("user_roles")
         .upsert({ user_id: data.user.id, role: "agent" }, { onConflict: "user_id,role" });
+    } else {
       await supabase
-        .from("users")
-        .update({ role: "agent", is_verified: true })
-        .eq("id", data.user.id);
-    } else if (data.user) {
-      // Mark regular users as verified too — no email gate
-      await supabase
-        .from("users")
-        .update({ is_verified: true })
-        .eq("id", data.user.id);
+        .from("user_roles")
+        .upsert({ user_id: data.user.id, role: "user" }, { onConflict: "user_id,role" });
     }
 
-    // If data.session exists, user is already signed in (email confirmation disabled in Supabase)
-    // If not, we still treat it as success and don't redirect to verify page
     return { error: null, needsVerification: false };
   };
 
