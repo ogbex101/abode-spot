@@ -26,6 +26,7 @@ import { Route as AuthenticatedAdminAdminPropertiesRouteImport } from './routes/
 import { Route as AuthenticatedAdminAdminInquiriesRouteImport } from './routes/_authenticated/_admin/admin.inquiries'
 import { Route as AuthenticatedAdminAdminFeaturedRouteImport } from './routes/_authenticated/_admin/admin.featured'
 import { Route as AuthenticatedAdminAdminDashboardRouteImport } from './routes/_authenticated/_admin/admin.dashboard'
+import { Route as AuthenticatedAdminAdminAddPropertyRouteImport } from './routes/_authenticated/_admin/admin.add-property'
 
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
@@ -117,6 +118,12 @@ const AuthenticatedAdminAdminDashboardRoute =
     path: '/admin/dashboard',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminAdminAddPropertyRoute =
+  AuthenticatedAdminAdminAddPropertyRouteImport.update({
+    id: '/admin/add-property',
+    path: '/admin/add-property',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/property/$id': typeof PropertyIdRoute
   '/agent/inquiries': typeof AuthenticatedAgentInquiriesRoute
+  '/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
   '/admin/dashboard': typeof AuthenticatedAdminAdminDashboardRoute
   '/admin/featured': typeof AuthenticatedAdminAdminFeaturedRoute
   '/admin/inquiries': typeof AuthenticatedAdminAdminInquiriesRoute
@@ -145,6 +153,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/property/$id': typeof PropertyIdRoute
   '/agent/inquiries': typeof AuthenticatedAgentInquiriesRoute
+  '/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
   '/admin/dashboard': typeof AuthenticatedAdminAdminDashboardRoute
   '/admin/featured': typeof AuthenticatedAdminAdminFeaturedRoute
   '/admin/inquiries': typeof AuthenticatedAdminAdminInquiriesRoute
@@ -165,6 +174,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/property/$id': typeof PropertyIdRoute
   '/_authenticated/agent/inquiries': typeof AuthenticatedAgentInquiriesRoute
+  '/_authenticated/_admin/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
   '/_authenticated/_admin/admin/dashboard': typeof AuthenticatedAdminAdminDashboardRoute
   '/_authenticated/_admin/admin/featured': typeof AuthenticatedAdminAdminFeaturedRoute
   '/_authenticated/_admin/admin/inquiries': typeof AuthenticatedAdminAdminInquiriesRoute
@@ -184,6 +194,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/property/$id'
     | '/agent/inquiries'
+    | '/admin/add-property'
     | '/admin/dashboard'
     | '/admin/featured'
     | '/admin/inquiries'
@@ -201,6 +212,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/property/$id'
     | '/agent/inquiries'
+    | '/admin/add-property'
     | '/admin/dashboard'
     | '/admin/featured'
     | '/admin/inquiries'
@@ -220,6 +232,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/property/$id'
     | '/_authenticated/agent/inquiries'
+    | '/_authenticated/_admin/admin/add-property'
     | '/_authenticated/_admin/admin/dashboard'
     | '/_authenticated/_admin/admin/featured'
     | '/_authenticated/_admin/admin/inquiries'
@@ -359,10 +372,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminDashboardRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/_admin/admin/add-property': {
+      id: '/_authenticated/_admin/admin/add-property'
+      path: '/admin/add-property'
+      fullPath: '/admin/add-property'
+      preLoaderRoute: typeof AuthenticatedAdminAdminAddPropertyRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
   }
 }
 
 interface AuthenticatedAdminRouteChildren {
+  AuthenticatedAdminAdminAddPropertyRoute: typeof AuthenticatedAdminAdminAddPropertyRoute
   AuthenticatedAdminAdminDashboardRoute: typeof AuthenticatedAdminAdminDashboardRoute
   AuthenticatedAdminAdminFeaturedRoute: typeof AuthenticatedAdminAdminFeaturedRoute
   AuthenticatedAdminAdminInquiriesRoute: typeof AuthenticatedAdminAdminInquiriesRoute
@@ -371,6 +392,8 @@ interface AuthenticatedAdminRouteChildren {
 }
 
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
+  AuthenticatedAdminAdminAddPropertyRoute:
+    AuthenticatedAdminAdminAddPropertyRoute,
   AuthenticatedAdminAdminDashboardRoute: AuthenticatedAdminAdminDashboardRoute,
   AuthenticatedAdminAdminFeaturedRoute: AuthenticatedAdminAdminFeaturedRoute,
   AuthenticatedAdminAdminInquiriesRoute: AuthenticatedAdminAdminInquiriesRoute,
@@ -423,13 +446,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-router' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
