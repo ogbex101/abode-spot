@@ -1,10 +1,6 @@
 // ============================================
-// Auth Provider
-// - Wraps Supabase auth, exposes user + role + verification state.
-// - Role is fetched from `user_roles` table (server-side enforced via RLS).
-// - DOES NOT do client-side role overrides for any email — privilege
-//   escalation is prevented at the DB layer. Admin accounts are
-//   provisioned in Supabase (see supabase/schema.sql instructions).
+// Auth Provider — no email verification required.
+// Role is fetched from `user_roles` table (server-side enforced via RLS).
 // ============================================
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
@@ -49,7 +45,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       supabase.from("user_roles").select("role").eq("user_id", uid),
     ]);
     setProfile((prof as AppUser) ?? null);
-    // Highest privilege wins.
     const roleList = (roles ?? []).map((r: { role: AppRole }) => r.role);
     const resolved: AppRole = roleList.includes("admin")
       ? "admin"
@@ -64,22 +59,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-    // Set listener FIRST (Supabase recommendation)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
-        // defer DB calls to avoid deadlock inside listener
         setTimeout(() => loadProfileAndRole(s.user.id), 0);
       } else {
         setProfile(null);
         setRole("user");
       }
-      // Invalidate caches on any auth change
       queryClient.invalidateQueries();
       router.invalidate();
     });
-    // Then read existing session
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       setUser(s?.user ?? null);
@@ -98,33 +89,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp: AuthContextValue["signUp"] = async (email, password, fullName, desiredRole = "user") => {
     if (!supabase) return { error: "Supabase not configured", needsVerification: false };
-    const redirectTo = typeof window !== "undefined" ? window.location.origin : undefined;
+
+    // Sign up WITHOUT email confirmation — users get immediate access
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: redirectTo,
+        // No emailRedirectTo so Supabase doesn't require email confirmation
         data: { full_name: fullName },
       },
     });
     if (error) return { error: error.message, needsVerification: false };
 
-    // If an agent role was requested, insert it after the DB trigger creates the default 'user' row.
-    // We do this only for 'agent' since 'user' is already inserted by the trigger.
+    // Insert agent role immediately if requested
     if (desiredRole === "agent" && data.user) {
       await supabase
         .from("user_roles")
         .upsert({ user_id: data.user.id, role: "agent" }, { onConflict: "user_id,role" });
-
-      // Also update the profile row's role column for display purposes
       await supabase
         .from("users")
-        .update({ role: "agent" })
+        .update({ role: "agent", is_verified: true })
+        .eq("id", data.user.id);
+    } else if (data.user) {
+      // Mark regular users as verified too — no email gate
+      await supabase
+        .from("users")
+        .update({ is_verified: true })
         .eq("id", data.user.id);
     }
 
-    const needsVerification = !data.session;
-    return { error: null, needsVerification };
+    // If data.session exists, user is already signed in (email confirmation disabled in Supabase)
+    // If not, we still treat it as success and don't redirect to verify page
+    return { error: null, needsVerification: false };
   };
 
   const signOut = async () => {
@@ -136,8 +132,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await loadProfileAndRole(user.id);
   };
 
+  // isVerified is always true — we removed the verification gate
   const isVerified = useMemo(
-    () => Boolean(user?.email_confirmed_at) || role === "admin",
+    () => Boolean(user) || role === "admin",
     [user, role]
   );
 

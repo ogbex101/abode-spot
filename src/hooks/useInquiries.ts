@@ -10,16 +10,32 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
     queryKey: ["inquiries", opts.scope, user?.id ?? "anon", role],
     queryFn: async () => {
       if (!isSupabaseConfigured || !supabase) return MOCK_INQUIRIES;
+
+      // Base query with full joins
       let q = supabase
         .from("inquiries")
-        .select("*, property:properties(*), user:users!inquiries_user_id_fkey(*)")
+        .select("*, property:properties(*, agent:users!properties_agent_id_fkey(*)), user:users!inquiries_user_id_fkey(*)")
         .order("created_at", { ascending: false });
-      if (opts.scope === "user" && user) q = q.eq("user_id", user.id);
-      // for agent + admin, RLS handles filtering server-side
+
+      if (opts.scope === "user" && user) {
+        // Buyer sees their own sent inquiries
+        q = q.eq("user_id", user.id);
+      } else if (opts.scope === "agent" && user) {
+        // Agent sees inquiries on their own listed properties
+        // We filter client-side after fetching since RLS already restricts
+        const { data, error } = await q;
+        if (error) throw new Error(error.message);
+        const items = (data as Inquiry[]) ?? [];
+        // Filter to only inquiries where property.agent_id === current user
+        return items.filter((i) => i.property?.agent_id === user.id || role === "admin");
+      }
+      // admin: RLS lets them see all
+
       const { data, error } = await q;
       if (error) throw new Error(error.message);
       return (data as Inquiry[]) ?? [];
     },
+    enabled: !!user || opts.scope === "admin",
   });
 }
 
@@ -29,7 +45,6 @@ export function useCreateInquiry() {
   return useMutation({
     mutationFn: async ({ propertyId, message }: { propertyId: string; message: string }) => {
       if (!isSupabaseConfigured || !supabase || !user) {
-        // mock: do nothing persistent
         await new Promise((r) => setTimeout(r, 400));
         return;
       }

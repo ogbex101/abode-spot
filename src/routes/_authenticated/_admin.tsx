@@ -159,13 +159,17 @@ function AdminLayout() {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="relative rounded-xl">
-              <Bell className="h-4 w-4" />
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
-            </Button>
-            <Button variant="ghost" size="icon" className="rounded-xl">
-              <Settings className="h-4 w-4" />
-            </Button>
+            <Link to="/admin/inquiries">
+              <Button variant="ghost" size="icon" className="relative rounded-xl" title="Inquiries">
+                <Bell className="h-4 w-4" />
+                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
+              </Button>
+            </Link>
+            <Link to="/admin/users">
+              <Button variant="ghost" size="icon" className="rounded-xl" title="Manage users">
+                <Settings className="h-4 w-4" />
+              </Button>
+            </Link>
             <div className="h-8 w-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
               AD
             </div>

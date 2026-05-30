@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Heart, Inbox, User as UserIcon, Settings, Home, ArrowRight,
-  Bell, TrendingUp, Eye, Star, MapPin, Building2, Phone, ChevronRight
+  Bell, TrendingUp, Eye, Star, MapPin, Building2, Phone, ChevronRight, Plus
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSavedProperties } from "@/hooks/useFavorites";
@@ -199,6 +199,7 @@ function DashboardPage() {
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Quick Links</p>
                   {[
                     { label: "Browse all properties", icon: <Building2 className="h-4 w-4" />, to: "/properties" },
+                    { label: "List a property", icon: <Plus className="h-4 w-4" />, to: "/agent" },
                     { label: "Saved favourites", icon: <Heart className="h-4 w-4" />, to: "/dashboard", tab: "saved" },
                     { label: "Update profile", icon: <UserIcon className="h-4 w-4" />, to: "/dashboard", tab: "profile" },
                   ].map((link, i) => (

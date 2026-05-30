@@ -59,7 +59,7 @@ function Register() {
     const parsed = schema.safeParse(form);
     if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
     setLoading(true);
-    const { error, needsVerification } = await signUp(
+    const { error } = await signUp(
       parsed.data.email,
       parsed.data.password,
       parsed.data.fullName,
@@ -67,13 +67,8 @@ function Register() {
     );
     setLoading(false);
     if (error) { toast.error(error); return; }
-    if (needsVerification) {
-      toast.success("Check your email to verify your account.");
-      navigate({ to: "/verify-email" });
-    } else {
-      toast.success("Account created!");
-      navigate({ to: desiredRole === "agent" ? "/agent" : "/dashboard" });
-    }
+    toast.success("Account created! Welcome to AbodeSpot.");
+    navigate({ to: desiredRole === "agent" ? "/agent" : "/dashboard" });
   };
 
   return (
