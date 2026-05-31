@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
-import { MOCK_INQUIRIES } from "@/lib/mock-data";
+import { MOCK_INQUIRIES, MOCK_PROPERTIES } from "@/lib/mock-data";
 import type { Inquiry, InquiryStatus } from "@/lib/types";
 
 export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { scope: "user" }) {
@@ -10,38 +10,55 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
   return useQuery({
     queryKey: ["inquiries", opts.scope, user?.id ?? "anon"],
     queryFn: async () => {
-      // ── MOCK MODE ────────────────────────────────────────────────────────────
+      // ── MOCK MODE ─────────────────────────────────────────────────────────────
       if (!isSupabaseConfigured || !supabase) {
         if (opts.scope === "admin") return MOCK_INQUIRIES;
-        if (opts.scope === "agent") return MOCK_INQUIRIES; // mock agent sees all
+        if (opts.scope === "agent") {
+          // In mock mode, the agent sees inquiries on their own mock properties.
+          // We use MOCK_AGENT's id ("agent-1") as the owner of several listings.
+          // Since the logged-in user won't match "agent-1", we just return all
+          // mock inquiries so the agent dashboard isn't empty during development.
+          return MOCK_INQUIRIES;
+        }
         return MOCK_INQUIRIES.filter((i) => i.user_id === "user-demo");
       }
 
-      // ── SUPABASE MODE ─────────────────────────────────────────────────────────
-      // For agent scope: fetch ALL inquiries where the property belongs to this agent.
-      // RLS `inq_select_involved` already allows agents to see inquiries on their properties.
+      // ── SUPABASE MODE ──────────────────────────────────────────────────────────
+
+      // ── AGENT: inquiries on MY properties ─────────────────────────────────────
       if (opts.scope === "agent" && user) {
+        // Strategy: fetch this agent's property IDs first, then get
+        // all inquiries for those properties. This is more reliable than
+        // a join because RLS may block the nested filter approach.
+        const { data: myProps, error: propErr } = await supabase
+          .from("properties")
+          .select("id")
+          .eq("agent_id", user.id);
+
+        if (propErr) throw new Error(propErr.message);
+        const myPropIds = (myProps ?? []).map((p: { id: string }) => p.id);
+
+        // If the agent has no properties, return empty immediately
+        if (myPropIds.length === 0) return [] as Inquiry[];
+
+        // Now fetch inquiries for those specific property IDs
         const { data, error } = await supabase
           .from("inquiries")
           .select(`
             *,
             property:properties(
-              id, title, city, state, images, agent_id,
-              agent:users!properties_agent_id_fkey(id, full_name, email, phone)
+              id, title, city, state, images, agent_id
             ),
             user:users!inquiries_user_id_fkey(id, full_name, email, phone)
           `)
+          .in("property_id", myPropIds)
           .order("created_at", { ascending: false });
 
         if (error) throw new Error(error.message);
-        const all = (data as Inquiry[]) ?? [];
-        // Client-side guard: only show inquiries for THIS agent's properties
-        return all.filter(
-          (i) => (i.property as { agent_id?: string } | null)?.agent_id === user.id
-        );
+        return (data as Inquiry[]) ?? [];
       }
 
-      // User: their sent inquiries
+      // ── USER: their own sent inquiries ────────────────────────────────────────
       if (opts.scope === "user" && user) {
         const { data, error } = await supabase
           .from("inquiries")
@@ -57,7 +74,7 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
         return (data as Inquiry[]) ?? [];
       }
 
-      // Admin: all inquiries
+      // ── ADMIN: all inquiries ───────────────────────────────────────────────────
       const { data, error } = await supabase
         .from("inquiries")
         .select(`
