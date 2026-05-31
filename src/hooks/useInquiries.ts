@@ -10,7 +10,7 @@ async function attachUserProfiles(inquiries: Inquiry[]): Promise<Inquiry[]> {
   const userIds = [...new Set(inquiries.map((i) => i.user_id).filter(Boolean))];
   const { data: profiles } = await supabase
     .from("users")
-    .select("id, full_name, email, phone")
+    .select("*")
     .in("id", userIds);
   const byId = Object.fromEntries((profiles ?? []).map((p: { id: string }) => [p.id, p]));
   return inquiries.map((i) => ({ ...i, user: byId[i.user_id] ?? null }));
