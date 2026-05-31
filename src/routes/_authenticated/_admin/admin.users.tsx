@@ -33,20 +33,53 @@ function AdminUsers() {
     queryKey: ["admin_users"],
     queryFn: async () => {
       if (!isSupabaseConfigured || !supabase) return [MOCK_AGENT] as AppUser[];
+
+      // Join user_roles — this is the authoritative role source (same as useAuth)
       const { data, error } = await supabase
         .from("users")
-        .select("*")
+        .select("*, user_roles(role)")
         .order("created_at", { ascending: false });
       if (error) throw new Error(error.message);
-      return (data as AppUser[]) ?? [];
+
+      // Resolve effective role: admin > agent > user
+      return (data ?? []).map((u: AppUser & { user_roles?: { role: AppRole }[] }) => {
+        const roles = (u.user_roles ?? []).map((r) => r.role);
+        const resolvedRole: AppRole = roles.includes("admin")
+          ? "admin"
+          : roles.includes("agent")
+          ? "agent"
+          : "user";
+        return { ...u, role: resolvedRole } as AppUser;
+      });
     },
   });
 
   const updateRole = useMutation({
     mutationFn: async ({ id, role }: { id: string; role: AppRole }) => {
       if (!supabase) throw new Error("Not connected");
-      const { error } = await supabase.from("users").update({ role }).eq("id", id);
-      if (error) throw new Error(error.message);
+
+      // Update display column in users table
+      const { error: userErr } = await supabase.from("users").update({ role }).eq("id", id);
+      if (userErr) throw new Error(userErr.message);
+
+      // Always ensure base 'user' role exists
+      await supabase
+        .from("user_roles")
+        .upsert({ user_id: id, role: "user" }, { onConflict: "user_id,role" });
+
+      // Add the new role
+      const { error: roleErr } = await supabase
+        .from("user_roles")
+        .upsert({ user_id: id, role }, { onConflict: "user_id,role" });
+      if (roleErr) throw new Error(roleErr.message);
+
+      // Remove higher roles when downgrading
+      if (role === "user") {
+        await supabase.from("user_roles").delete().eq("user_id", id).in("role", ["agent", "admin"]);
+      }
+      if (role === "agent") {
+        await supabase.from("user_roles").delete().eq("user_id", id).eq("role", "admin");
+      }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin_users"] }); toast.success("Role updated"); },
     onError: (e: Error) => toast.error(e.message),

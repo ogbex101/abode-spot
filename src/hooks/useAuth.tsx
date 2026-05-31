@@ -46,12 +46,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ]);
     setProfile((prof as AppUser) ?? null);
     const roleList = (roles ?? []).map((r: { role: AppRole }) => r.role);
+
+    // user_roles is the authoritative source — resolve effective role from it
     const resolved: AppRole = roleList.includes("admin")
       ? "admin"
       : roleList.includes("agent")
       ? "agent"
       : "user";
     setRole(resolved);
+
+    // Keep public.users.role in sync so admin panel and profile display match
+    if (prof && (prof as AppUser).role !== resolved) {
+      await supabase.from("users").update({ role: resolved }).eq("id", uid);
+    }
   };
 
   useEffect(() => {
