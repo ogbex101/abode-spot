@@ -102,6 +102,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) return { error: error.message, needsVerification: false };
     if (!data.user) return { error: "Signup failed — no user returned", needsVerification: false };
 
+    // Auto-confirm the email via our secure Vercel API route so the user
+    // can sign in immediately — no confirmation email required.
+    try {
+      await fetch("/api/confirm-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: data.user.id }),
+      });
+    } catch (confirmErr) {
+      console.warn("Auto-confirm request failed (non-fatal):", confirmErr);
+    }
+
     // Wait a moment for the DB trigger to create the users row
     await new Promise((r) => setTimeout(r, 800));
 
