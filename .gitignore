@@ -31,5 +31,8 @@ yarn-debug.log*
 yarn-error.log*
 bun-debug.log*
 
+# TypeScript incremental build info
+*.tsbuildinfo
+
 # TanStack Router (auto-generated, committed intentionally for now)
 # src/routeTree.gen.ts

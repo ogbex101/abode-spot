@@ -111,7 +111,7 @@ grant select, insert, update, delete on public.users to authenticated;
 grant select on public.users to anon;
 grant all on public.users to service_role;
 
-grant select on public.user_roles to authenticated;
+grant select, insert on public.user_roles to authenticated;
 grant all on public.user_roles to service_role;
 
 grant select on public.properties to anon, authenticated;
