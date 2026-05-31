@@ -12,7 +12,8 @@ export const Route = createFileRoute("/login")({
 });
 
 function Login() {
-  const { signIn, user, role, loading } = useAuth();
+  // ← added `profile` so we know when loadProfileAndRole has finished
+  const { signIn, user, role, loading, profile } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,13 +21,18 @@ function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [didSignIn, setDidSignIn] = useState(false);
 
-  // Once auth state resolves after sign-in, redirect to the correct portal
+  // Wait until:
+  //   1. the user triggered a sign-in (didSignIn)
+  //   2. Supabase auth is settled (loading === false)
+  //   3. the user object exists (user)
+  //   4. the profile has been fetched from DB (profile !== null)
+  //      — this guarantees role is the real DB value, not the "user" default
   useEffect(() => {
-    if (!didSignIn || loading || !user) return;
+    if (!didSignIn || loading || !user || !profile) return;
     if (role === "admin") navigate({ to: "/admin/dashboard" });
     else if (role === "agent") navigate({ to: "/agent" });
     else navigate({ to: "/dashboard" });
-  }, [didSignIn, loading, user, role, navigate]);
+  }, [didSignIn, loading, user, profile, role, navigate]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

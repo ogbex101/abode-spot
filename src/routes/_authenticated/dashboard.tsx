@@ -38,11 +38,25 @@ function DashboardPage() {
 
   useEffect(() => {
     if (loading) return;
+    // Redirect non-users away from the user dashboard.
+    // Returning null below prevents any flash of user dashboard content.
     if (role === "admin") navigate({ to: "/admin/dashboard" });
     else if (role === "agent") navigate({ to: "/agent" });
   }, [role, loading, navigate]);
 
+  // Show spinner while auth is resolving
   if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // ← KEY FIX: don't render any user dashboard content for agents/admins.
+  // The useEffect above will navigate them away; returning null prevents
+  // the user dashboard from flashing on screen while that redirect happens.
+  if (role === "admin" || role === "agent") {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
