@@ -12,8 +12,8 @@ async function attachUserProfiles(inquiries: Inquiry[]): Promise<Inquiry[]> {
     .from("users")
     .select("*")
     .in("id", userIds);
-  const byId = Object.fromEntries((profiles ?? []).map((p: { id: string }) => [p.id, p]));
-  return inquiries.map((i) => ({ ...i, user: byId[i.user_id] ?? null }));
+  const byId = Object.fromEntries((profiles ?? []).map((p) => [p.id, p]));
+  return inquiries.map((i) => ({ ...i, user: (byId[i.user_id] ?? null) as Inquiry["user"] }));
 }
 
 export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { scope: "user" }) {
