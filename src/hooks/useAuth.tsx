@@ -66,7 +66,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      // TOKEN_REFRESHED: only swap the session object — no DB calls, no query
+      // invalidation. Supabase refreshes silently every ~55 min; calling
+      // loadProfileAndRole + invalidateQueries here was causing 429s.
+      if (event === "TOKEN_REFRESHED") {
+        setSession(s);
+        return;
+      }
+
+      // INITIAL_SESSION fires when the listener first attaches. getSession()
+      // below already handles the initial load (with await), so we skip here
+      // to avoid calling loadProfileAndRole twice on every page load.
+      if (event === "INITIAL_SESSION") return;
+
+      // SIGNED_IN, SIGNED_OUT, USER_UPDATED, PASSWORD_RECOVERY, etc.
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
@@ -78,12 +92,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.invalidateQueries();
       router.invalidate();
     });
+
+    // Initial page load: await the profile/role fetch so loading stays true
+    // until role is known — prevents flash of wrong role-gated content.
     supabase.auth.getSession().then(async ({ data: { session: s } }) => {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) await loadProfileAndRole(s.user.id);
       setLoading(false);
     });
+
     return () => subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
