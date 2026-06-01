@@ -24,10 +24,10 @@ import { Route as AuthenticatedAgentEditIdRouteImport } from './routes/_authenti
 import { Route as AuthenticatedAdminAdminUsersRouteImport } from './routes/_authenticated/_admin/admin.users'
 import { Route as AuthenticatedAdminAdminPropertiesRouteImport } from './routes/_authenticated/_admin/admin.properties'
 import { Route as AuthenticatedAdminAdminInquiriesRouteImport } from './routes/_authenticated/_admin/admin.inquiries'
+import { Route as AuthenticatedAdminAdminHomepageRouteImport } from './routes/_authenticated/_admin/admin.homepage'
 import { Route as AuthenticatedAdminAdminFeaturedRouteImport } from './routes/_authenticated/_admin/admin.featured'
 import { Route as AuthenticatedAdminAdminDashboardRouteImport } from './routes/_authenticated/_admin/admin.dashboard'
 import { Route as AuthenticatedAdminAdminAddPropertyRouteImport } from './routes/_authenticated/_admin/admin.add-property'
-import { Route as AuthenticatedAdminAdminHomepageRouteImport } from './routes/_authenticated/_admin/admin.homepage'
 
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
@@ -107,6 +107,12 @@ const AuthenticatedAdminAdminInquiriesRoute =
     path: '/admin/inquiries',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminAdminHomepageRoute =
+  AuthenticatedAdminAdminHomepageRouteImport.update({
+    id: '/admin/homepage',
+    path: '/admin/homepage',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminAdminFeaturedRoute =
   AuthenticatedAdminAdminFeaturedRouteImport.update({
     id: '/admin/featured',
@@ -117,12 +123,6 @@ const AuthenticatedAdminAdminDashboardRoute =
   AuthenticatedAdminAdminDashboardRouteImport.update({
     id: '/admin/dashboard',
     path: '/admin/dashboard',
-    getParentRoute: () => AuthenticatedAdminRoute,
-  } as any)
-const AuthenticatedAdminAdminHomepageRoute =
-  AuthenticatedAdminAdminHomepageRouteImport.update({
-    id: '/admin/homepage',
-    path: '/admin/homepage',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
 const AuthenticatedAdminAdminAddPropertyRoute =
@@ -143,7 +143,6 @@ export interface FileRoutesByFullPath {
   '/property/$id': typeof PropertyIdRoute
   '/agent/inquiries': typeof AuthenticatedAgentInquiriesRoute
   '/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
-  '/admin/homepage': typeof AuthenticatedAdminAdminHomepageRoute
   '/admin/dashboard': typeof AuthenticatedAdminAdminDashboardRoute
   '/admin/featured': typeof AuthenticatedAdminAdminFeaturedRoute
   '/admin/homepage': typeof AuthenticatedAdminAdminHomepageRoute
@@ -163,7 +162,6 @@ export interface FileRoutesByTo {
   '/property/$id': typeof PropertyIdRoute
   '/agent/inquiries': typeof AuthenticatedAgentInquiriesRoute
   '/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
-  '/admin/homepage': typeof AuthenticatedAdminAdminHomepageRoute
   '/admin/dashboard': typeof AuthenticatedAdminAdminDashboardRoute
   '/admin/featured': typeof AuthenticatedAdminAdminFeaturedRoute
   '/admin/homepage': typeof AuthenticatedAdminAdminHomepageRoute
@@ -373,6 +371,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminInquiriesRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/_admin/admin/homepage': {
+      id: '/_authenticated/_admin/admin/homepage'
+      path: '/admin/homepage'
+      fullPath: '/admin/homepage'
+      preLoaderRoute: typeof AuthenticatedAdminAdminHomepageRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/_admin/admin/featured': {
       id: '/_authenticated/_admin/admin/featured'
       path: '/admin/featured'
@@ -394,21 +399,14 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminAddPropertyRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
-    '/_authenticated/_admin/admin/homepage': {
-      id: '/_authenticated/_admin/admin/homepage'
-      path: '/admin/homepage'
-      fullPath: '/admin/homepage'
-      preLoaderRoute: typeof AuthenticatedAdminAdminHomepageRouteImport
-      parentRoute: typeof AuthenticatedAdminRoute
-    }
   }
 }
 
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAdminAddPropertyRoute: typeof AuthenticatedAdminAdminAddPropertyRoute
-  AuthenticatedAdminAdminHomepageRoute: typeof AuthenticatedAdminAdminHomepageRoute
   AuthenticatedAdminAdminDashboardRoute: typeof AuthenticatedAdminAdminDashboardRoute
   AuthenticatedAdminAdminFeaturedRoute: typeof AuthenticatedAdminAdminFeaturedRoute
+  AuthenticatedAdminAdminHomepageRoute: typeof AuthenticatedAdminAdminHomepageRoute
   AuthenticatedAdminAdminInquiriesRoute: typeof AuthenticatedAdminAdminInquiriesRoute
   AuthenticatedAdminAdminPropertiesRoute: typeof AuthenticatedAdminAdminPropertiesRoute
   AuthenticatedAdminAdminUsersRoute: typeof AuthenticatedAdminAdminUsersRoute
@@ -417,9 +415,9 @@ interface AuthenticatedAdminRouteChildren {
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminAdminAddPropertyRoute:
     AuthenticatedAdminAdminAddPropertyRoute,
-  AuthenticatedAdminAdminHomepageRoute: AuthenticatedAdminAdminHomepageRoute,
   AuthenticatedAdminAdminDashboardRoute: AuthenticatedAdminAdminDashboardRoute,
   AuthenticatedAdminAdminFeaturedRoute: AuthenticatedAdminAdminFeaturedRoute,
+  AuthenticatedAdminAdminHomepageRoute: AuthenticatedAdminAdminHomepageRoute,
   AuthenticatedAdminAdminInquiriesRoute: AuthenticatedAdminAdminInquiriesRoute,
   AuthenticatedAdminAdminPropertiesRoute:
     AuthenticatedAdminAdminPropertiesRoute,
