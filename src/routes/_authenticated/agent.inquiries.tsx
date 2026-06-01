@@ -14,9 +14,17 @@ export const Route = createFileRoute("/_authenticated/agent/inquiries")({
 });
 
 function AgentInquiries() {
-  const { role } = useAuth();
+  const { role, loading } = useAuth();
   const { data, isLoading } = useInquiries({ scope: "agent" });
   const update = useUpdateInquiryStatus();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (role !== "agent" && role !== "admin") {
     return (

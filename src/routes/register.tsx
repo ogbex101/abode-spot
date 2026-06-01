@@ -39,7 +39,7 @@ const ROLES: { value: DesiredRole; label: string; description: string; perks: st
 ];
 
 function Register() {
-  const { signUp } = useAuth();
+  const { signUp, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2>(1);
   const [desiredRole, setDesiredRole] = useState<DesiredRole>("user");
@@ -65,8 +65,12 @@ function Register() {
       parsed.data.fullName,
       desiredRole
     );
+    if (error) { setLoading(false); toast.error(error); return; }
+    // Re-fetch role from DB now that all user_roles writes are complete.
+    // Without this, the onAuthStateChange fires before the agent role is written
+    // and the user lands on /agent still seeing role="user".
+    await refreshProfile();
     setLoading(false);
-    if (error) { toast.error(error); return; }
     toast.success("Account created! Welcome to AbodeSpot.");
     navigate({ to: desiredRole === "agent" ? "/agent" : "/dashboard" });
   };

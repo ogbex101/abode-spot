@@ -43,7 +43,7 @@ const EMPTY_FORM = {
 };
 
 function AgentHome() {
-  const { user, role } = useAuth();
+  const { user, role, loading } = useAuth();
   const navigate = useNavigate();
   const create = useCreateProperty();
   const del = useDeleteProperty();
@@ -53,6 +53,14 @@ function AgentHome() {
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [images, setImages] = useState<string[]>([]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   // Non-agents see a "request to list" prompt instead of a hard block
   if (role !== "agent" && role !== "admin") {

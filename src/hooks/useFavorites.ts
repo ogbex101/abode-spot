@@ -47,7 +47,7 @@ export function useSavedProperties() {
       }
       const { data, error } = await supabase
         .from("properties")
-        .select("*, agent:users!properties_agent_id_fkey(*)")
+        .select("*, agent:users(*)")
         .in("id", idList);
       if (error) throw new Error(error.message);
       return (data as Property[]) ?? [];
