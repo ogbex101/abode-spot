@@ -227,7 +227,7 @@ function AgentSidebar({ propertyId, agent }: { propertyId: string; agent?: impor
             return;
           }
           create.mutate(
-            { propertyId, message: message.trim() },
+            { propertyId, agentId: agent?.id ?? "", message: message.trim() },
             {
               onSuccess: () => {
                 toast.success("Inquiry sent!");

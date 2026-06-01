@@ -99,7 +99,8 @@ create table if not exists public.saved_properties (
 -- 6) inquiries ---------------------------------------------
 create table if not exists public.inquiries (
   id uuid primary key default gen_random_uuid(),
-  property_id uuid not null references public.properties(id) on delete cascade,
+  property_id uuid references public.properties(id) on delete set null,
+  agent_id uuid not null references public.users(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   message text not null,
   status text default 'unread' check (status in ('unread','read','replied')),
@@ -177,7 +178,7 @@ drop policy if exists "sp_owner_all" on public.saved_properties;
 create policy "sp_owner_all" on public.saved_properties for all
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 
--- inquiries: sender can read own; property owner (agent) can read; admin all
+-- inquiries: sender and recipient agent can read; agent can update status; admin all
 drop policy if exists "inq_insert_self" on public.inquiries;
 create policy "inq_insert_self" on public.inquiries for insert
   with check (user_id = auth.uid());
@@ -185,14 +186,14 @@ drop policy if exists "inq_select_involved" on public.inquiries;
 create policy "inq_select_involved" on public.inquiries for select
   using (
     user_id = auth.uid()
+    or agent_id = auth.uid()
     or public.has_role(auth.uid(),'admin')
-    or exists (select 1 from public.properties p where p.id = inquiries.property_id and p.agent_id = auth.uid())
   );
 drop policy if exists "inq_update_admin_or_agent" on public.inquiries;
 create policy "inq_update_admin_or_agent" on public.inquiries for update
   using (
-    public.has_role(auth.uid(),'admin')
-    or exists (select 1 from public.properties p where p.id = inquiries.property_id and p.agent_id = auth.uid())
+    agent_id = auth.uid()
+    or public.has_role(auth.uid(),'admin')
   );
 drop policy if exists "inq_delete_admin" on public.inquiries;
 create policy "inq_delete_admin" on public.inquiries for delete
