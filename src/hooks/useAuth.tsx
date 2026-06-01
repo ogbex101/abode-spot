@@ -78,10 +78,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.invalidateQueries();
       router.invalidate();
     });
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
       setSession(s);
       setUser(s?.user ?? null);
-      if (s?.user) loadProfileAndRole(s.user.id);
+      if (s?.user) await loadProfileAndRole(s.user.id);
       setLoading(false);
     });
     return () => subscription.unsubscribe();

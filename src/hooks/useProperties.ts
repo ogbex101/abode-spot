@@ -54,7 +54,7 @@ export function useProperties(filters: PropertyFilters = {}) {
       }
       let q = supabase
         .from("properties")
-        .select("*, agent:users!properties_agent_id_fkey(*)")
+        .select("*, agent:users(*)")
         .order("created_at", { ascending: false });
       if (filters.status && filters.status !== "all") q = q.eq("status", filters.status);
       if (filters.propertyType && filters.propertyType !== "all")
@@ -92,7 +92,7 @@ export function useProperty(id: string | undefined) {
       }
       const { data, error } = await supabase
         .from("properties")
-        .select("*, agent:users!properties_agent_id_fkey(*)")
+        .select("*, agent:users(*)")
         .eq("id", id!)
         .maybeSingle();
       if (error) throw new Error(error.message);
