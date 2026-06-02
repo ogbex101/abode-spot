@@ -13,30 +13,50 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
       // ── MOCK MODE ─────────────────────────────────────────────────────────────
       if (!isSupabaseConfigured || !supabase) {
         if (opts.scope === "admin") return MOCK_INQUIRIES;
-        if (opts.scope === "agent") {
-          return MOCK_INQUIRIES;
-        }
+        if (opts.scope === "agent") return MOCK_INQUIRIES;
         return MOCK_INQUIRIES.filter((i) => i.user_id === "user-demo");
       }
 
-      // ── SUPABASE MODE ──────────────────────────────────────────────────────────
-
       // ── AGENT: inquiries sent TO this agent ─────────────────────────────────────
       if (opts.scope === "agent" && user) {
-        const { data, error } = await supabase
+        // First get inquiries for this agent
+        const { data: inquiries, error: inquiriesError } = await supabase
           .from("inquiries")
           .select(`
             *,
-            property:properties(
+            property:properties (
               id, title, city, state, images, price, listing_type, address, agent_id
-            ),
-            user:users!inquiries_user_id_fkey(id, full_name, email, phone)
+            )
           `)
-          .eq("agent_id", user.id)  // ← FIXED: Direct filter by agent_id
+          .eq("agent_id", user.id)
           .order("created_at", { ascending: false });
 
-        if (error) throw new Error(error.message);
-        return (data as Inquiry[]) ?? [];
+        if (inquiriesError) throw new Error(inquiriesError.message);
+        
+        if (!inquiries || inquiries.length === 0) return [];
+        
+        // Get unique user IDs from inquiries
+        const userIds = [...new Set(inquiries.map(i => i.user_id))];
+        
+        // Fetch user details separately
+        const { data: users, error: usersError } = await supabase
+          .from("users")
+          .select("id, full_name, email, phone")
+          .in("id", userIds);
+          
+        if (usersError) {
+          console.warn("Could not fetch users:", usersError);
+          return inquiries as Inquiry[];
+        }
+        
+        // Combine the data
+        const userMap = new Map(users?.map(u => [u.id, u]) || []);
+        const enrichedInquiries = inquiries.map(inquiry => ({
+          ...inquiry,
+          user: userMap.get(inquiry.user_id)
+        }));
+        
+        return enrichedInquiries as Inquiry[];
       }
 
       // ── USER: their own sent inquiries ────────────────────────────────────────
@@ -45,9 +65,7 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
           .from("inquiries")
           .select(`
             *,
-            property:properties(id, title, city, state, images, price, listing_type),
-            user:users!inquiries_user_id_fkey(id, full_name, email),
-            agent:users!inquiries_agent_id_fkey(id, full_name, email, phone)
+            property:properties(id, title, city, state, images, price, listing_type)
           `)
           .eq("user_id", user.id)
           .order("created_at", { ascending: false });
@@ -61,9 +79,7 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
         .from("inquiries")
         .select(`
           *,
-          property:properties(id, title, city, state, images, agent_id),
-          user:users!inquiries_user_id_fkey(id, full_name, email, phone),
-          agent:users!inquiries_agent_id_fkey(id, full_name, email)
+          property:properties(id, title, city, state, images, agent_id)
         `)
         .order("created_at", { ascending: false });
 
@@ -85,7 +101,7 @@ export function useCreateInquiry() {
         return;
       }
       
-      // CRITICAL FIX: Get the property's agent_id first
+      // Get the property's agent_id
       const { data: property, error: propError } = await supabase
         .from("properties")
         .select("agent_id")
@@ -100,10 +116,11 @@ export function useCreateInquiry() {
         .insert({ 
           property_id: propertyId, 
           user_id: user.id,
-          agent_id: property.agent_id,  // ← FIXED: Include agent_id
+          agent_id: property.agent_id,
           message,
           status: "unread"
         });
+        
       if (error) throw new Error(error.message);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["inquiries"] }),
