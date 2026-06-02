@@ -136,7 +136,7 @@ function AgentHome() {
           <h1 className="text-3xl font-bold" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>Agent Dashboard</h1>
           <p className="text-muted-foreground">Manage your listings and inquiries.</p>
         </div>
-        <Link to="/agent/inquiries">
+        <Link to="/agent/inquiries" className="no-underline">
           <Button variant="outline" className="relative gap-2">
             <Inbox className="h-4 w-4" /> Inquiries
             {unread > 0 && (
@@ -226,7 +226,7 @@ function AgentHome() {
                         >
                           {p.status}
                         </Badge>
-                      </td>
+                       </td>
                       <td className="px-4 py-3">{p.views ?? 0}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-1">
@@ -250,8 +250,8 @@ function AgentHome() {
                             <Trash2 className="h-3 w-3" /> Delete
                           </Button>
                         </div>
-                      </td>
-                    </tr>
+                       </td>
+                     </tr>
                   ))}
                 </tbody>
               </table>
