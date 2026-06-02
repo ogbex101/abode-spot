@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 export type Conversation = {
   id: string;
@@ -150,6 +150,8 @@ export function useMessages(conversationId: string | null) {
   const markMessagesAsRead = useMutation({
     mutationFn: async (convId: string) => {
       if (!user) return;
+      if (!supabase) return;
+      
       const { error } = await supabase
         .from("messages")
         .update({ is_read: true, read_at: new Date().toISOString() })
