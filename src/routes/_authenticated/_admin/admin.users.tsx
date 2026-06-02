@@ -34,19 +34,41 @@ function AdminUsers() {
     queryFn: async () => {
       if (!isSupabaseConfigured || !supabase) return [MOCK_AGENT] as AppUser[];
 
-      // Join user_roles — this is the authoritative role source (same as useAuth)
-      const { data, error } = await supabase
+      // First fetch all users
+      const { data: users, error: usersError } = await supabase
         .from("users")
-        .select("*, user_roles(role)")
+        .select("*")
         .order("created_at", { ascending: false });
-      if (error) throw new Error(error.message);
+      
+      if (usersError) throw new Error(usersError.message);
+      if (!users) return [];
+
+      // Then fetch all user roles separately
+      const { data: roles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id, role");
+      
+      if (rolesError) {
+        console.warn("Could not fetch roles:", rolesError);
+        // Return users with default role
+        return users.map(u => ({ ...u, role: "user" as AppRole }));
+      }
+
+      // Create a map of user_id -> roles
+      const rolesByUser = new Map<string, AppRole[]>();
+      roles?.forEach(role => {
+        if (!rolesByUser.has(role.user_id)) {
+          rolesByUser.set(role.user_id, []);
+        }
+        rolesByUser.get(role.user_id)?.push(role.role as AppRole);
+      });
 
       // Resolve effective role: admin > agent > user
-      return (data ?? []).map((u: AppUser & { user_roles?: { role: AppRole }[] }) => {
-        const roles = (u.user_roles ?? []).map((r) => r.role);
-        const resolvedRole: AppRole = roles.includes("admin")
+      return users.map((u) => {
+        const userRoles = rolesByUser.get(u.id) || [];
+        const resolvedRole: AppRole = userRoles.includes("admin")
           ? "admin"
-          : roles.includes("agent")
+          : userRoles.includes("agent")
           ? "agent"
           : "user";
         return { ...u, role: resolvedRole } as AppUser;
@@ -191,16 +213,16 @@ function AdminUsers() {
                     <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
                     Loading users…
                   </div>
-                </td>
-              </tr>
+                 </td>
+               </tr>
             )}
             {!isLoading && filtered.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-5 py-10 text-center text-muted-foreground">
                   <UserIcon className="h-8 w-8 mx-auto mb-2 opacity-30" />
                   No users found
-                </td>
-              </tr>
+                 </td>
+               </tr>
             )}
             {filtered.map((u) => (
               <tr key={u.id} className="border-t hover:bg-muted/20 transition-colors">
@@ -216,10 +238,10 @@ function AdminUsers() {
                       </div>
                     </div>
                   </div>
-                </td>
+                 </td>
                 <td className="px-5 py-3.5 hidden md:table-cell">
                   <RoleBadge role={u.role} />
-                </td>
+                 </td>
                 <td className="px-5 py-3.5 hidden md:table-cell">
                   {u.is_verified ? (
                     <span className="flex items-center gap-1.5 text-success text-xs font-medium">
@@ -230,12 +252,12 @@ function AdminUsers() {
                       <XCircle className="h-3.5 w-3.5" /> Pending
                     </span>
                   )}
-                </td>
+                 </td>
                 <td className="px-5 py-3.5 hidden lg:table-cell">
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Calendar className="h-3 w-3" />{formatDate(u.created_at)}
                   </span>
-                </td>
+                 </td>
                 <td className="px-5 py-3.5">
                   <div className="flex justify-end">
                     <DropdownMenu>
@@ -272,7 +294,7 @@ function AdminUsers() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-                </td>
+                 </td>
               </tr>
             ))}
           </tbody>
