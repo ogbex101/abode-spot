@@ -1,7 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { z } from "zod";
-import { Pencil, Inbox, Plus, Trash2, Eye, BarChart2, Building2, ArrowRight, Mail, Phone, CheckCircle2, MessageCircle } from "lucide-react";
+import { 
+  Pencil, Inbox, Plus, Trash2, Eye, BarChart2, Building2, ArrowRight, 
+  Mail, Phone, CheckCircle2, MessageSquare, Send, Loader2, 
+  ChevronRight, User, Clock, Home, LogOut, Settings, Heart
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,15 +14,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/useAuth";
 import { useCreateProperty, useProperties, useDeleteProperty } from "@/hooks/useProperties";
 import { useInquiries, useUpdateInquiryStatus } from "@/hooks/useInquiries";
+import { useConversations, useMessages, useCreateConversation } from "@/hooks/useMessages";
 import { PROPERTY_TYPES } from "@/lib/constants";
 import { ImageUpload } from "@/components/property/ImageUpload";
 import { formatPrice, formatDate } from "@/lib/format";
 import { toast } from "sonner";
-import type { PropertyType, ListingType, Inquiry } from "@/lib/types";
+import type { PropertyType, ListingType } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/agent")({
   component: AgentHome,
@@ -52,15 +61,27 @@ function AgentHome() {
   const updateInquiry = useUpdateInquiryStatus();
   const myProps = useProperties({ agentId: user?.id, status: "all" });
   const inquiries = useInquiries({ scope: "agent" });
-  const unread = (inquiries.data ?? []).filter((i: any) => i.status === "unread").length;
+  const { data: conversations, refetch: refetchConversations } = useConversations();
+  const createConversation = useCreateConversation();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [images, setImages] = useState<string[]>([]);
+  const [selectedChat, setSelectedChat] = useState<any>(null);
+  const [chatModalOpen, setChatModalOpen] = useState(false);
+  const [replyDialogOpen, setReplyDialogOpen] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
   const [replyMessage, setReplyMessage] = useState("");
-  const [replyDialogOpen, setReplyDialogOpen] = useState(false);
+  const [newMessageText, setNewMessageText] = useState("");
 
-  // Non-agents see a "request to list" prompt instead of a hard block
+  const unread = (inquiries.data ?? []).filter((i: any) => i.status === "unread").length;
+  
+  // Get unread message count from conversations
+  const unreadMessagesCount = conversations?.reduce((count, conv) => {
+    // This would need a separate query for unread messages count
+    return count;
+  }, 0) || 0;
+
+  // Non-agents see a "request to list" prompt
   if (role !== "agent" && role !== "admin") {
     return (
       <div className="mx-auto max-w-2xl px-4 py-24 text-center">
@@ -167,6 +188,11 @@ function AgentHome() {
     }
   };
 
+  const handleOpenChat = (conversation: any) => {
+    setSelectedChat(conversation);
+    setChatModalOpen(true);
+  };
+
   const props = myProps.data ?? [];
   const approved = props.filter((p) => p.status === "approved").length;
   const pending = props.filter((p) => p.status === "pending").length;
@@ -179,7 +205,7 @@ function AgentHome() {
       <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>Agent Dashboard</h1>
-          <p className="text-muted-foreground">Manage your listings and inquiries.</p>
+          <p className="text-muted-foreground">Manage your listings and communicate with buyers.</p>
         </div>
       </div>
 
@@ -202,7 +228,7 @@ function AgentHome() {
       </div>
 
       <Tabs defaultValue="inquiries" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+        <TabsList className="grid w-full grid-cols-3 lg:w-[500px]">
           <TabsTrigger value="inquiries" className="gap-2">
             <Inbox className="h-4 w-4" /> Inquiries
             {unread > 0 && (
@@ -211,11 +237,16 @@ function AgentHome() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="chats" className="gap-2">
+            <MessageSquare className="h-4 w-4" /> Chats
+            {unreadMessagesCount > 0 && (
+              <Badge variant="destructive" className="ml-1 h-5 w-5 rounded-full p-0 text-xs">
+                {unreadMessagesCount}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="listings" className="gap-2">
             <Building2 className="h-4 w-4" /> My Listings
-          </TabsTrigger>
-          <TabsTrigger value="add" className="gap-2">
-            <Plus className="h-4 w-4" /> Add Property
           </TabsTrigger>
         </TabsList>
 
@@ -231,7 +262,7 @@ function AgentHome() {
             <CardContent>
               {inquiries.isLoading ? (
                 <div className="flex justify-center py-20">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : inquiryItems.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground">
@@ -353,6 +384,42 @@ function AgentHome() {
           </Card>
         </TabsContent>
 
+        {/* ── CHATS TAB ── */}
+        <TabsContent value="chats" className="mt-0">
+          <Card className="h-[600px] flex flex-col">
+            <CardHeader>
+              <CardTitle>Conversations</CardTitle>
+              <CardDescription>Chat with potential buyers in real-time</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-hidden p-0">
+              {!conversations ? (
+                <div className="flex justify-center py-20">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : conversations.length === 0 ? (
+                <div className="text-center py-20 text-muted-foreground">
+                  <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                  <p className="font-medium">No conversations yet</p>
+                  <p className="text-sm mt-1">When buyers message you, conversations will appear here.</p>
+                </div>
+              ) : (
+                <ScrollArea className="h-[500px]">
+                  <div className="divide-y">
+                    {conversations.map((conv) => (
+                      <ChatConversationItem
+                        key={conv.id}
+                        conversation={conv}
+                        onOpenChat={handleOpenChat}
+                        currentUserId={user?.id || ""}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* ── LISTINGS TAB ── */}
         <TabsContent value="listings" className="mt-0">
           <Card>
@@ -363,7 +430,7 @@ function AgentHome() {
             <CardContent>
               {myProps.isLoading ? (
                 <div className="flex justify-center py-20">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : props.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground">
@@ -450,99 +517,9 @@ function AgentHome() {
             </CardContent>
           </Card>
         </TabsContent>
-
-        {/* ── ADD PROPERTY TAB ── */}
-        <TabsContent value="add" className="mt-0">
-          <Card>
-            <CardHeader>
-              <CardTitle>New Property Listing</CardTitle>
-              <CardDescription>Add a new property to your portfolio</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="grid gap-4 md:grid-cols-2" onSubmit={onSubmit}>
-                <div className="space-y-2">
-                  <Label>Title *</Label>
-                  <Input placeholder="e.g. 3-Bedroom Flat, Lekki Phase 1" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Price (₦) *</Label>
-                  <Input type="number" min="0" placeholder="e.g. 85000000" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Property type</Label>
-                  <Select value={form.property_type} onValueChange={(v) => setForm({ ...form, property_type: v as PropertyType })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{PROPERTY_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Listing type</Label>
-                  <Select value={form.listing_type} onValueChange={(v) => setForm({ ...form, listing_type: v as ListingType })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sale">For sale</SelectItem>
-                      <SelectItem value="rent">For rent</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Bedrooms</Label>
-                  <Input type="number" min="0" placeholder="e.g. 3" value={form.bedrooms} onChange={(e) => setForm({ ...form, bedrooms: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Bathrooms</Label>
-                  <Input type="number" min="0" step="0.5" placeholder="e.g. 2" value={form.bathrooms} onChange={(e) => setForm({ ...form, bathrooms: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Area (sqft)</Label>
-                  <Input type="number" min="0" placeholder="e.g. 2200" value={form.area_sqft} onChange={(e) => setForm({ ...form, area_sqft: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Address</Label>
-                  <Input placeholder="e.g. 14 Admiralty Way" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>City</Label>
-                  <Input placeholder="e.g. Lekki" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>State</Label>
-                  <Input placeholder="e.g. Lagos" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />
-                </div>
-                <div className="md:col-span-2">
-                  <Label>Description</Label>
-                  <Textarea
-                    className="mt-2"
-                    rows={4}
-                    placeholder="Describe the property — features, condition, nearby landmarks…"
-                    value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value.slice(0, 2000) })}
-                  />
-                  <div className="text-xs text-muted-foreground mt-1 text-right">{form.description.length}/2000</div>
-                </div>
-                <div className="md:col-span-2">
-                  <Label>Photos (upload or paste URL)</Label>
-                  <div className="mt-2">
-                    <ImageUpload value={images} onChange={setImages} pathPrefix={user?.id ?? "uploads"} />
-                  </div>
-                </div>
-                <div className="md:col-span-2 flex gap-3">
-                  <Button type="submit" disabled={create.isPending} className="gap-2">
-                    {create.isPending ? (
-                      <><span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Submitting…</>
-                    ) : (
-                      <><Plus className="h-4 w-4" /> Submit for approval</>
-                    )}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => setForm(EMPTY_FORM)}>Clear form</Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
-      {/* Reply Dialog */}
+      {/* Reply Dialog for Email */}
       <Dialog open={replyDialogOpen} onOpenChange={setReplyDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -576,7 +553,171 @@ function AgentHome() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Chat Modal */}
+      {selectedChat && (
+        <ChatModal
+          open={chatModalOpen}
+          onOpenChange={setChatModalOpen}
+          conversation={selectedChat}
+          currentUserId={user?.id || ""}
+        />
+      )}
     </div>
+  );
+}
+
+// Chat Conversation Item Component
+function ChatConversationItem({ conversation, onOpenChat, currentUserId }: { 
+  conversation: any; 
+  onOpenChat: (conv: any) => void;
+  currentUserId: string;
+}) {
+  const otherUser = conversation.other_user;
+  const lastMessageTime = formatDistanceToNow(new Date(conversation.last_message_at), { addSuffix: true });
+  
+  return (
+    <div 
+      className="flex items-center gap-3 p-4 hover:bg-muted/50 cursor-pointer transition-colors"
+      onClick={() => onOpenChat(conversation)}
+    >
+      <Avatar className="h-12 w-12">
+        <AvatarFallback className="bg-primary/10 text-primary">
+          {otherUser?.full_name?.slice(0, 2).toUpperCase() || "U"}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between">
+          <p className="font-semibold truncate">{otherUser?.full_name || "User"}</p>
+          <span className="text-xs text-muted-foreground">{lastMessageTime}</span>
+        </div>
+        <p className="text-sm text-muted-foreground truncate">
+          {conversation.property?.title && (
+            <span className="text-xs text-primary">Re: {conversation.property.title} · </span>
+          )}
+          {conversation.last_message}
+        </p>
+      </div>
+      {conversation.unread_count > 0 && (
+        <Badge variant="destructive" className="rounded-full h-5 w-5 p-0 flex items-center justify-center">
+          {conversation.unread_count}
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+// Chat Modal Component
+function ChatModal({ open, onOpenChange, conversation, currentUserId }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  conversation: any;
+  currentUserId: string;
+}) {
+  const [newMessage, setNewMessage] = useState("");
+  const { messages, isLoading, sendMessage, isSending, markAsRead } = useMessages(conversation.id);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  const otherUser = conversation.other_user;
+  
+  useEffect(() => {
+    if (open && conversation.id) {
+      markAsRead();
+    }
+  }, [open, conversation.id]);
+  
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+  
+  const handleSend = () => {
+    if (!newMessage.trim()) return;
+    sendMessage({ 
+      conversationId: conversation.id, 
+      message: newMessage, 
+      receiverId: otherUser?.id 
+    });
+    setNewMessage("");
+  };
+  
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+  
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px] h-[600px] flex flex-col p-0">
+        <DialogHeader className="px-4 py-3 border-b">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                {otherUser?.full_name?.slice(0, 2).toUpperCase() || "U"}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <DialogTitle>{otherUser?.full_name || "User"}</DialogTitle>
+              <DialogDescription className="text-xs">
+                {conversation.property?.title && `About: ${conversation.property.title}`}
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+        
+        <ScrollArea className="flex-1 p-4">
+          {isLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+              <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No messages yet</p>
+              <p className="text-xs">Start the conversation!</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {messages.map((msg) => {
+                const isOwn = msg.sender_id === currentUserId;
+                return (
+                  <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[75%] ${isOwn ? "order-2" : "order-1"}`}>
+                      <div className={`rounded-2xl px-3 py-2 ${
+                        isOwn 
+                          ? "bg-primary text-primary-foreground" 
+                          : "bg-muted"
+                      }`}>
+                        <p className="text-sm break-words">{msg.message}</p>
+                      </div>
+                      <div className={`text-xs text-muted-foreground mt-1 ${isOwn ? "text-right" : "text-left"}`}>
+                        {formatDate(msg.created_at)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </ScrollArea>
+        
+        <div className="p-4 border-t flex gap-2">
+          <Textarea
+            placeholder="Type a message..."
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={isSending}
+            className="min-h-[60px] max-h-[100px] resize-none"
+          />
+          <Button onClick={handleSend} disabled={!newMessage.trim() || isSending} size="icon" className="h-auto">
+            {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -591,4 +732,18 @@ function InquiryStatusBadge({ status }: { status: string }) {
       {status}
     </Badge>
   );
+}
+
+function formatDistanceToNow(date: string, options?: { addSuffix: boolean }): string {
+  const now = new Date();
+  const diff = now.getTime() - new Date(date).getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
+  return formatDate(date);
 }
