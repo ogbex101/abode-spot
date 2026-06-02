@@ -25,7 +25,6 @@ import { ImageUpload } from "@/components/property/ImageUpload";
 import { formatPrice, formatDate } from "@/lib/format";
 import { toast } from "sonner";
 import type { PropertyType, ListingType } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/agent")({
   component: AgentHome,
@@ -59,7 +58,7 @@ function AgentHome() {
   const updateInquiry = useUpdateInquiryStatus();
   const myProps = useProperties({ agentId: user?.id, status: "all" });
   const inquiries = useInquiries({ scope: "agent" });
-  const { data: conversations } = useConversations();
+  const { data: conversations, refetch: refetchConversations } = useConversations();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [images, setImages] = useState<string[]>([]);
@@ -70,10 +69,6 @@ function AgentHome() {
   const [replyMessage, setReplyMessage] = useState("");
 
   const unread = (inquiries.data ?? []).filter((i: any) => i.status === "unread").length;
-  
-  const unreadMessagesCount = conversations?.reduce((count, conv) => {
-    return count;
-  }, 0) || 0;
 
   // Non-agents see a "request to list" prompt
   if (role !== "agent" && role !== "admin") {
@@ -175,10 +170,28 @@ function AgentHome() {
       return;
     }
     if (selectedInquiry?.user?.email) {
-      window.location.href = `mailto:${selectedInquiry.user.email}?subject=Re: ${encodeURIComponent(selectedInquiry.property?.title || "Property Inquiry")}&body=${encodeURIComponent(replyMessage)}`;
-      handleMarkAsReplied(selectedInquiry.id);
+      // Instead of email, create a conversation and send message through chat
+      handleCreateChatFromInquiry(selectedInquiry);
     } else {
-      toast.error("No email address found for this user");
+      toast.error("Cannot reply to this inquiry");
+    }
+  };
+
+  const handleCreateChatFromInquiry = async (inquiry: any) => {
+    if (!user) return;
+    try {
+      const createConv = useCreateConversation();
+      const convId = await createConv.mutateAsync({
+        propertyId: inquiry.property_id,
+        agentId: user.id,
+        initialMessage: `Regarding your inquiry about "${inquiry.property?.title}": ${replyMessage}`
+      });
+      toast.success("Response sent via chat!");
+      setReplyDialogOpen(false);
+      setReplyMessage("");
+      refetchConversations();
+    } catch (error) {
+      toast.error("Failed to send response");
     }
   };
 
@@ -219,8 +232,11 @@ function AgentHome() {
         ))}
       </div>
 
-      <Tabs defaultValue="inquiries" className="space-y-6">
+      <Tabs defaultValue="chats" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3 lg:w-[500px]">
+          <TabsTrigger value="chats" className="gap-2">
+            <MessageSquare className="h-4 w-4" /> Messages
+          </TabsTrigger>
           <TabsTrigger value="inquiries" className="gap-2">
             <Inbox className="h-4 w-4" /> Inquiries
             {unread > 0 && (
@@ -229,95 +245,12 @@ function AgentHome() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="chats" className="gap-2">
-            <MessageSquare className="h-4 w-4" /> Chats
-            {unreadMessagesCount > 0 && (
-              <Badge variant="destructive" className="ml-1 h-5 w-5 rounded-full p-0 text-xs">
-                {unreadMessagesCount}
-              </Badge>
-            )}
-          </TabsTrigger>
           <TabsTrigger value="listings" className="gap-2">
             <Building2 className="h-4 w-4" /> My Listings
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="inquiries" className="mt-0">
-          <Card>
-            <CardHeader>
-              <CardTitle>Received Inquiries</CardTitle>
-              <CardDescription>Messages from potential buyers interested in your properties</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {inquiries.isLoading ? (
-                <div className="flex justify-center py-20">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : inquiryItems.length === 0 ? (
-                <div className="text-center py-20 text-muted-foreground">
-                  <Inbox className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                  <p className="font-medium">No inquiries yet</p>
-                  <p className="text-sm mt-1">When buyers contact you, their messages will appear here.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {inquiryItems.map((inq: any) => {
-                    const property = inq.property as { id?: string; title?: string; city?: string; images?: string[] } | null;
-                    const sender = inq.user as { id?: string; full_name?: string; email?: string; phone?: string } | null;
-                    
-                    return (
-                      <div key={inq.id} className={`rounded-lg border p-4 transition-all ${inq.status === "unread" ? "border-primary/50 bg-primary/5 shadow-sm" : "bg-card"}`}>
-                        <div className="flex flex-wrap gap-4">
-                          {property?.images?.[0] && (
-                            <img src={property.images[0]} alt="" className="h-20 w-24 rounded-lg object-cover shrink-0" />
-                          )}
-                          <div className="flex-1 min-w-0 space-y-2">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <Link to="/property/$id" params={{ id: property?.id || "" }} className="font-semibold hover:underline">
-                                  {property?.title || "Unknown Property"}
-                                </Link>
-                                {property?.city && <span className="text-xs text-muted-foreground ml-2">{property.city}</span>}
-                              </div>
-                              <InquiryStatusBadge status={inq.status} />
-                            </div>
-                            <p className="text-sm bg-muted/30 rounded-lg p-3">"{inq.message}"</p>
-                            <div className="flex flex-wrap items-center gap-4 text-xs">
-                              <span className="font-medium text-foreground">{sender?.full_name || "Anonymous"}</span>
-                              {sender?.email && (
-                                <a href={`mailto:${sender.email}`} className="flex items-center gap-1 text-primary hover:underline">
-                                  <Mail className="h-3 w-3" /> {sender.email}
-                                </a>
-                              )}
-                              {sender?.phone && (
-                                <a href={`tel:${sender.phone}`} className="flex items-center gap-1 text-muted-foreground hover:text-foreground">
-                                  <Phone className="h-3 w-3" /> {sender.phone}
-                                </a>
-                              )}
-                              <span className="text-muted-foreground">{formatDate(inq.created_at)}</span>
-                            </div>
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            {inq.status === "unread" && (
-                              <Button size="sm" variant="outline" onClick={() => handleMarkAsRead(inq.id)}>Mark as read</Button>
-                            )}
-                            <Button size="sm" onClick={() => handleReply(inq)} className="gap-2"><Mail className="h-3.5 w-3.5" /> Reply</Button>
-                            {inq.status !== "replied" && (
-                              <Button size="sm" variant="ghost" onClick={() => handleMarkAsReplied(inq.id)}>
-                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Mark replied
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
+        {/* ── CHATS TAB ── */}
         <TabsContent value="chats" className="mt-0">
           <Card className="h-[600px] flex flex-col">
             <CardHeader>
@@ -362,6 +295,72 @@ function AgentHome() {
           </Card>
         </TabsContent>
 
+        {/* ── INQUIRIES TAB ── */}
+        <TabsContent value="inquiries" className="mt-0">
+          <Card>
+            <CardHeader>
+              <CardTitle>Received Inquiries</CardTitle>
+              <CardDescription>Messages from potential buyers interested in your properties</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {inquiries.isLoading ? (
+                <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : inquiryItems.length === 0 ? (
+                <div className="text-center py-20 text-muted-foreground">
+                  <Inbox className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                  <p className="font-medium">No inquiries yet</p>
+                  <p className="text-sm mt-1">When buyers contact you, their messages will appear here.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {inquiryItems.map((inq: any) => {
+                    const property = inq.property as { id?: string; title?: string; city?: string; images?: string[] } | null;
+                    const sender = inq.user as { id?: string; full_name?: string; email?: string; phone?: string } | null;
+                    
+                    return (
+                      <div key={inq.id} className={`rounded-lg border p-4 transition-all ${inq.status === "unread" ? "border-primary/50 bg-primary/5 shadow-sm" : "bg-card"}`}>
+                        <div className="flex flex-wrap gap-4">
+                          {property?.images?.[0] && (
+                            <img src={property.images[0]} alt="" className="h-20 w-24 rounded-lg object-cover shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0 space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <Link to="/property/$id" params={{ id: property?.id || "" }} className="font-semibold hover:underline">
+                                  {property?.title || "Unknown Property"}
+                                </Link>
+                                {property?.city && <span className="text-xs text-muted-foreground ml-2">{property.city}</span>}
+                              </div>
+                              <InquiryStatusBadge status={inq.status} />
+                            </div>
+                            <p className="text-sm bg-muted/30 rounded-lg p-3">"{inq.message}"</p>
+                            <div className="flex flex-wrap items-center gap-4 text-xs">
+                              <span className="font-medium text-foreground">{sender?.full_name || "Anonymous"}</span>
+                              {sender?.email && (
+                                <a href={`mailto:${sender.email}`} className="flex items-center gap-1 text-primary hover:underline">
+                                  <Mail className="h-3 w-3" /> {sender.email}
+                                </a>
+                              )}
+                              <span className="text-muted-foreground">{formatDate(inq.created_at)}</span>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {inq.status === "unread" && (
+                              <Button size="sm" variant="outline" onClick={() => handleMarkAsRead(inq.id)}>Mark as read</Button>
+                            )}
+                            <Button size="sm" onClick={() => handleReply(inq)} className="gap-2"><MessageSquare className="h-3.5 w-3.5" /> Reply via Chat</Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── LISTINGS TAB ── */}
         <TabsContent value="listings" className="mt-0">
           <Card>
             <CardHeader>
@@ -375,7 +374,7 @@ function AgentHome() {
                 <div className="text-center py-20 text-muted-foreground">
                   <Building2 className="h-12 w-12 mx-auto mb-4 opacity-30" />
                   <p className="font-medium">No listings yet.</p>
-                  <p className="text-sm mt-1">Use the "Add Property" tab to post your first listing.</p>
+                  <p className="text-sm mt-1">Use the "Add Property" button above to post your first listing.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -404,8 +403,8 @@ function AgentHome() {
                               <Link to="/agent/edit/$id" params={{ id: p.id }}><Button size="sm" variant="outline" className="gap-1"><Pencil className="h-3 w-3" /> Edit</Button></Link>
                               <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive gap-1" onClick={async () => { if (!confirm("Delete this listing? This cannot be undone.")) return; try { await del.mutateAsync(p.id); toast.success("Listing deleted"); } catch (e) { toast.error((e as Error).message); } }}><Trash2 className="h-3 w-3" /> Delete</Button>
                             </div>
-                          </td>
-                        </tr>
+                           </td>
+                         </tr>
                       ))}
                     </tbody>
                   </table>
@@ -416,54 +415,146 @@ function AgentHome() {
         </TabsContent>
       </Tabs>
 
+      {/* Reply Dialog - Now creates a chat instead of email */}
       <Dialog open={replyDialogOpen} onOpenChange={setReplyDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Reply to {selectedInquiry?.user?.full_name || "Buyer"}</DialogTitle>
-            <DialogDescription>Respond to inquiry about "{selectedInquiry?.property?.title}"</DialogDescription>
+            <DialogDescription>Your response will be sent as a chat message</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="rounded-lg bg-muted/30 p-3 text-sm"><p className="font-semibold mb-1">Original message:</p><p className="text-muted-foreground">"{selectedInquiry?.message}"</p></div>
-            <div className="space-y-2"><Label>Your reply</Label><Textarea placeholder="Type your response here..." rows={5} value={replyMessage} onChange={(e) => setReplyMessage(e.target.value)} /></div>
+            <div className="rounded-lg bg-muted/30 p-3 text-sm">
+              <p className="font-semibold mb-1">Original message:</p>
+              <p className="text-muted-foreground">"{selectedInquiry?.message}"</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Your reply</Label>
+              <Textarea
+                placeholder="Type your response here..."
+                rows={5}
+                value={replyMessage}
+                onChange={(e) => setReplyMessage(e.target.value)}
+              />
+            </div>
           </div>
-          <DialogFooter className="gap-2"><Button variant="outline" onClick={() => setReplyDialogOpen(false)}>Cancel</Button><Button onClick={handleSendReply} className="gap-2"><Mail className="h-4 w-4" /> Send Reply</Button></DialogFooter>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setReplyDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSendReply} className="gap-2">
+              <MessageSquare className="h-4 w-4" /> Send via Chat
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Chat Modal */}
       {selectedChat && (
-        <ChatModal open={chatModalOpen} onOpenChange={setChatModalOpen} conversation={selectedChat} currentUserId={user?.id || ""} />
+        <ChatModal
+          open={chatModalOpen}
+          onOpenChange={setChatModalOpen}
+          conversation={selectedChat}
+          currentUserId={user?.id || ""}
+        />
       )}
     </div>
   );
 }
 
-function ChatModal({ open, onOpenChange, conversation, currentUserId }: { open: boolean; onOpenChange: (open: boolean) => void; conversation: any; currentUserId: string }) {
+function ChatModal({ open, onOpenChange, conversation, currentUserId }: { 
+  open: boolean; 
+  onOpenChange: (open: boolean) => void; 
+  conversation: any; 
+  currentUserId: string;
+}) {
   const [newMessage, setNewMessage] = useState("");
   const { messages, isLoading, sendMessage, isSending, markAsRead } = useMessages(conversation.id);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const otherUser = conversation.other_user;
   
-  useEffect(() => { if (open && conversation.id) markAsRead(); }, [open, conversation.id]);
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => { 
+    if (open && conversation.id) markAsRead(); 
+  }, [open, conversation.id]);
   
-  const handleSend = () => { if (!newMessage.trim()) return; sendMessage({ conversationId: conversation.id, message: newMessage, receiverId: otherUser?.id }); setNewMessage(""); };
-  const handleKeyPress = (e: React.KeyboardEvent) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } };
+  useEffect(() => { 
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); 
+  }, [messages]);
+  
+  const handleSend = () => { 
+    if (!newMessage.trim()) return; 
+    sendMessage({ 
+      conversationId: conversation.id, 
+      message: newMessage, 
+      receiverId: otherUser?.id 
+    }); 
+    setNewMessage(""); 
+  };
+  
+  const handleKeyPress = (e: React.KeyboardEvent) => { 
+    if (e.key === "Enter" && !e.shiftKey) { 
+      e.preventDefault(); 
+      handleSend(); 
+    } 
+  };
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] h-[600px] flex flex-col p-0">
         <DialogHeader className="px-4 py-3 border-b">
           <div className="flex items-center gap-3">
-            <Avatar className="h-8 w-8"><AvatarFallback className="bg-primary/10 text-primary text-sm">{otherUser?.full_name?.slice(0, 2).toUpperCase() || "U"}</AvatarFallback></Avatar>
-            <div><DialogTitle>{otherUser?.full_name || "User"}</DialogTitle><DialogDescription className="text-xs">{conversation.property?.title && `About: ${conversation.property.title}`}</DialogDescription></div>
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                {otherUser?.full_name?.slice(0, 2).toUpperCase() || "U"}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <DialogTitle>{otherUser?.full_name || "User"}</DialogTitle>
+              <DialogDescription className="text-xs">
+                {conversation.property?.title && `About: ${conversation.property.title}`}
+              </DialogDescription>
+            </div>
           </div>
         </DialogHeader>
         <ScrollArea className="flex-1 p-4">
-          {isLoading ? <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div> : messages.length === 0 ? <div className="text-center py-10 text-muted-foreground"><MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-30" /><p className="text-sm">No messages yet</p><p className="text-xs">Start the conversation!</p></div> : <div className="space-y-3">{messages.map((msg) => { const isOwn = msg.sender_id === currentUserId; return (<div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}><div className={`max-w-[75%] ${isOwn ? "order-2" : "order-1"}`}><div className={`rounded-2xl px-3 py-2 ${isOwn ? "bg-primary text-primary-foreground" : "bg-muted"}`}><p className="text-sm break-words">{msg.message}</p></div><div className={`text-xs text-muted-foreground mt-1 ${isOwn ? "text-right" : "text-left"}`}>{formatDate(msg.created_at)}</div></div></div>); })}<div ref={messagesEndRef} /></div>}
+          {isLoading ? (
+            <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          ) : messages.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+              <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No messages yet</p>
+              <p className="text-xs">Start the conversation!</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {messages.map((msg) => {
+                const isOwn = msg.sender_id === currentUserId;
+                return (
+                  <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[75%] ${isOwn ? "order-2" : "order-1"}`}>
+                      <div className={`rounded-2xl px-3 py-2 ${isOwn ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                        <p className="text-sm break-words">{msg.message}</p>
+                      </div>
+                      <div className={`text-xs text-muted-foreground mt-1 ${isOwn ? "text-right" : "text-left"}`}>
+                        {formatDate(msg.created_at)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
         </ScrollArea>
         <div className="p-4 border-t flex gap-2">
-          <Textarea placeholder="Type a message..." value={newMessage} onChange={(e) => setNewMessage(e.target.value)} onKeyPress={handleKeyPress} disabled={isSending} className="min-h-[60px] max-h-[100px] resize-none" />
-          <Button onClick={handleSend} disabled={!newMessage.trim() || isSending} size="icon" className="h-auto">{isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button>
+          <Textarea 
+            placeholder="Type a message..." 
+            value={newMessage} 
+            onChange={(e) => setNewMessage(e.target.value)} 
+            onKeyPress={handleKeyPress} 
+            disabled={isSending} 
+            className="min-h-[60px] max-h-[100px] resize-none" 
+          />
+          <Button onClick={handleSend} disabled={!newMessage.trim() || isSending} size="icon" className="h-auto">
+            {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
