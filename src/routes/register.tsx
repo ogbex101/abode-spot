@@ -57,18 +57,39 @@ function Register() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = schema.safeParse(form);
-    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
+    if (!parsed.success) { 
+      toast.error(parsed.error.issues[0].message); 
+      return; 
+    }
+    
     setLoading(true);
+    
     const { error } = await signUp(
       parsed.data.email,
       parsed.data.password,
       parsed.data.fullName,
       desiredRole
     );
-    setLoading(false);
-    if (error) { toast.error(error); return; }
+    
+    if (error) { 
+      setLoading(false);
+      toast.error(error); 
+      return; 
+    }
+    
     toast.success("Account created! Welcome to AbodeSpot.");
-    navigate({ to: desiredRole === "agent" ? "/agent" : "/dashboard" });
+    
+    // Wait longer for the session and role to be properly set in the database
+    // This ensures the agent is correctly redirected to the agent dashboard
+    setTimeout(() => {
+      setLoading(false);
+      // Navigate based on selected role
+      if (desiredRole === "agent") {
+        navigate({ to: "/agent" });
+      } else {
+        navigate({ to: "/dashboard" });
+      }
+    }, 2500);
   };
 
   return (
