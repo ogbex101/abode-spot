@@ -14,10 +14,6 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
       if (!isSupabaseConfigured || !supabase) {
         if (opts.scope === "admin") return MOCK_INQUIRIES;
         if (opts.scope === "agent") {
-          // In mock mode, the agent sees inquiries on their own mock properties.
-          // We use MOCK_AGENT's id ("agent-1") as the owner of several listings.
-          // Since the logged-in user won't match "agent-1", we just return all
-          // mock inquiries so the agent dashboard isn't empty during development.
           return MOCK_INQUIRIES;
         }
         return MOCK_INQUIRIES.filter((i) => i.user_id === "user-demo");
@@ -25,33 +21,18 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
 
       // ── SUPABASE MODE ──────────────────────────────────────────────────────────
 
-      // ── AGENT: inquiries on MY properties ─────────────────────────────────────
+      // ── AGENT: inquiries sent TO this agent ─────────────────────────────────────
       if (opts.scope === "agent" && user) {
-        // Strategy: fetch this agent's property IDs first, then get
-        // all inquiries for those properties. This is more reliable than
-        // a join because RLS may block the nested filter approach.
-        const { data: myProps, error: propErr } = await supabase
-          .from("properties")
-          .select("id")
-          .eq("agent_id", user.id);
-
-        if (propErr) throw new Error(propErr.message);
-        const myPropIds = (myProps ?? []).map((p: { id: string }) => p.id);
-
-        // If the agent has no properties, return empty immediately
-        if (myPropIds.length === 0) return [] as Inquiry[];
-
-        // Now fetch inquiries for those specific property IDs
         const { data, error } = await supabase
           .from("inquiries")
           .select(`
             *,
             property:properties(
-              id, title, city, state, images, agent_id
+              id, title, city, state, images, price, listing_type, address, agent_id
             ),
             user:users!inquiries_user_id_fkey(id, full_name, email, phone)
           `)
-          .in("property_id", myPropIds)
+          .eq("agent_id", user.id)  // ← FIXED: Direct filter by agent_id
           .order("created_at", { ascending: false });
 
         if (error) throw new Error(error.message);
@@ -65,7 +46,8 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
           .select(`
             *,
             property:properties(id, title, city, state, images, price, listing_type),
-            user:users!inquiries_user_id_fkey(id, full_name, email)
+            user:users!inquiries_user_id_fkey(id, full_name, email),
+            agent:users!inquiries_agent_id_fkey(id, full_name, email, phone)
           `)
           .eq("user_id", user.id)
           .order("created_at", { ascending: false });
@@ -80,7 +62,8 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
         .select(`
           *,
           property:properties(id, title, city, state, images, agent_id),
-          user:users!inquiries_user_id_fkey(id, full_name, email, phone)
+          user:users!inquiries_user_id_fkey(id, full_name, email, phone),
+          agent:users!inquiries_agent_id_fkey(id, full_name, email)
         `)
         .order("created_at", { ascending: false });
 
@@ -98,13 +81,29 @@ export function useCreateInquiry() {
     mutationFn: async ({ propertyId, message }: { propertyId: string; message: string }) => {
       if (!user) throw new Error("You must be signed in to send an inquiry");
       if (!isSupabaseConfigured || !supabase) {
-        // Mock mode: simulate success
         await new Promise((r) => setTimeout(r, 500));
         return;
       }
+      
+      // CRITICAL FIX: Get the property's agent_id first
+      const { data: property, error: propError } = await supabase
+        .from("properties")
+        .select("agent_id")
+        .eq("id", propertyId)
+        .single();
+      
+      if (propError) throw new Error("Property not found");
+      if (!property.agent_id) throw new Error("This property doesn't have an assigned agent");
+      
       const { error } = await supabase
         .from("inquiries")
-        .insert({ property_id: propertyId, user_id: user.id, message });
+        .insert({ 
+          property_id: propertyId, 
+          user_id: user.id,
+          agent_id: property.agent_id,  // ← FIXED: Include agent_id
+          message,
+          status: "unread"
+        });
       if (error) throw new Error(error.message);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["inquiries"] }),
