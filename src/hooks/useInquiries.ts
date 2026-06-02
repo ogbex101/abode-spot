@@ -13,30 +13,54 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
       // ── MOCK MODE ─────────────────────────────────────────────────────────────
       if (!isSupabaseConfigured || !supabase) {
         if (opts.scope === "admin") return MOCK_INQUIRIES;
-        if (opts.scope === "agent") return MOCK_INQUIRIES;
+        if (opts.scope === "agent") {
+          return MOCK_INQUIRIES;
+        }
         return MOCK_INQUIRIES.filter((i) => i.user_id === "user-demo");
       }
 
       // ── AGENT: inquiries sent TO this agent ─────────────────────────────────────
       if (opts.scope === "agent" && user) {
+        console.log("🔍 Agent ID:", user.id);
+        
         // First get inquiries for this agent
         const { data: inquiries, error: inquiriesError } = await supabase
           .from("inquiries")
           .select(`
             *,
             property:properties (
-              id, title, city, state, images, price, listing_type, address, agent_id
+              id, 
+              title, 
+              city, 
+              state, 
+              images, 
+              price, 
+              listing_type, 
+              address, 
+              agent_id
             )
           `)
           .eq("agent_id", user.id)
           .order("created_at", { ascending: false });
 
-        if (inquiriesError) throw new Error(inquiriesError.message);
+        if (inquiriesError) {
+          console.error("❌ Inquiries error:", inquiriesError);
+          throw new Error(inquiriesError.message);
+        }
         
-        if (!inquiries || inquiries.length === 0) return [];
+        if (!inquiries || inquiries.length === 0) {
+          console.log("No inquiries found for agent");
+          return [];
+        }
+        
+        console.log(`Found ${inquiries.length} inquiries for agent`);
         
         // Get unique user IDs from inquiries
-        const userIds = [...new Set(inquiries.map(i => i.user_id))];
+        const userIds = [...new Set(inquiries.map(i => i.user_id).filter(Boolean))];
+        
+        if (userIds.length === 0) {
+          return inquiries as Inquiry[];
+        }
         
         // Fetch user details separately
         const { data: users, error: usersError } = await supabase
@@ -56,6 +80,7 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
           user: userMap.get(inquiry.user_id)
         }));
         
+        console.log("Enriched inquiries:", enrichedInquiries.length);
         return enrichedInquiries as Inquiry[];
       }
 
@@ -75,7 +100,7 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
       }
 
       // ── ADMIN: all inquiries ───────────────────────────────────────────────────
-      const { data, error } = await supabase
+      const { data: inquiries, error: inquiriesError } = await supabase
         .from("inquiries")
         .select(`
           *,
@@ -83,8 +108,33 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
         `)
         .order("created_at", { ascending: false });
 
-      if (error) throw new Error(error.message);
-      return (data as Inquiry[]) ?? [];
+      if (inquiriesError) throw new Error(inquiriesError.message);
+      
+      if (!inquiries || inquiries.length === 0) return [];
+      
+      // Get unique user IDs and agent IDs
+      const userIds = [...new Set(inquiries.map(i => i.user_id).filter(Boolean))];
+      const agentIds = [...new Set(inquiries.map(i => i.agent_id).filter(Boolean))];
+      const allPersonIds = [...new Set([...userIds, ...agentIds])];
+      
+      if (allPersonIds.length > 0) {
+        const { data: users, error: usersError } = await supabase
+          .from("users")
+          .select("id, full_name, email, phone")
+          .in("id", allPersonIds);
+          
+        if (!usersError && users) {
+          const userMap = new Map(users.map(u => [u.id, u]));
+          const enrichedInquiries = inquiries.map(inquiry => ({
+            ...inquiry,
+            user: userMap.get(inquiry.user_id),
+            agent: userMap.get(inquiry.agent_id)
+          }));
+          return enrichedInquiries as Inquiry[];
+        }
+      }
+      
+      return inquiries as Inquiry[];
     },
     enabled: !!user || opts.scope === "admin",
   });
