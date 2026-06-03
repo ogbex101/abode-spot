@@ -4,8 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Heart, Inbox, User as UserIcon, Settings, Home, ArrowRight,
   TrendingUp, Building2, ChevronRight, Plus, Phone, Mail,
-  Star, Loader2, Save, CheckCircle2, Clock, Send, ReplyAll,
-  MessageSquare, ChevronDown, ChevronUp
+  Star, Loader2, Save, CheckCircle2, Clock, Send, ReplyAll, MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,7 +84,12 @@ function DashboardPage() {
     setLoadingReplies(true);
     setReplyDialogOpen(true);
     
-    // Fetch all replies for this inquiry
+    if (!supabase) {
+      toast.error("Database connection not available");
+      setLoadingReplies(false);
+      return;
+    }
+    
     try {
       const { data, error } = await supabase
         .from("inquiries")
@@ -100,9 +104,8 @@ function DashboardPage() {
       if (error) throw error;
       setConversationReplies(data || []);
       
-      // Mark as read if any unread messages
-      if (inquiry.status === "unread") {
-        const { data: updateData, error: updateError } = await supabase
+      if (inquiry.status === "unread" && supabase) {
+        const { error: updateError } = await supabase
           .from("inquiries")
           .update({ status: "read" })
           .eq("id", inquiry.id);
@@ -118,7 +121,7 @@ function DashboardPage() {
     }
   };
 
-  const handleSendReply = async () => {
+  const handleSendReply = () => {
     if (!replyMessage.trim() || !selectedInquiry) return;
     
     sendReply.mutate({
@@ -130,11 +133,10 @@ function DashboardPage() {
       onSuccess: () => {
         toast.success("Reply sent!");
         setReplyMessage("");
-        // Refresh conversation
         handleOpenConversation(selectedInquiry);
         inquiries.refetch();
       },
-      onError: (error) => {
+      onError: (error: Error) => {
         toast.error(error.message);
       }
     });
@@ -259,7 +261,6 @@ function DashboardPage() {
               </div>
 
               <div className="space-y-4">
-                {/* Recent inquiries */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-base font-bold">Recent Inquiries</h2>
@@ -302,7 +303,6 @@ function DashboardPage() {
                   </div>
                 </div>
 
-                {/* Quick links */}
                 <div className="rounded-2xl border bg-card p-4 space-y-1">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Quick Links</p>
                   {[
@@ -344,7 +344,7 @@ function DashboardPage() {
             )}
           </TabsContent>
 
-          {/* ── INQUIRIES TAB WITH CONVERSATION THREAD ── */}
+          {/* ── INQUIRIES TAB ── */}
           <TabsContent value="inquiries" className="mt-0">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-xl font-bold">My Inquiries & Conversations</h2>
@@ -467,14 +467,13 @@ function DashboardPage() {
 // Inquiry Card Component
 function InquiryCard({ inquiry, onOpenConversation }: { inquiry: any; onOpenConversation: () => void }) {
   const property = inquiry.property as { id?: string; title?: string; city?: string; images?: string[] } | null;
-  const hasReplies = inquiry.reply_count > 0;
-  const isReplied = inquiry.status === "replied";
+  const isReplied = inquiry.status === "replied" || inquiry.has_agent_reply;
   
   return (
     <div className="rounded-2xl border bg-card overflow-hidden hover:shadow-md transition-all">
       <div className="p-4">
         <div className="flex gap-4">
-          {property?.images?.[0] && (
+          {property?.images && property.images[0] && (
             <img src={property.images[0]} alt="" className="h-16 w-20 rounded-lg object-cover shrink-0" />
           )}
           <div className="flex-1 min-w-0">
@@ -491,7 +490,7 @@ function InquiryCard({ inquiry, onOpenConversation }: { inquiry: any; onOpenConv
                   <span className="text-xs text-muted-foreground ml-2">{property.city}</span>
                 )}
               </div>
-              <InquiryBadge status={inquiry.status} />
+              <InquiryBadge status={isReplied ? "replied" : inquiry.status} />
             </div>
             
             <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
@@ -522,13 +521,13 @@ function InquiryCard({ inquiry, onOpenConversation }: { inquiry: any; onOpenConv
   );
 }
 
-// ── Profile Form ──
+// Profile Form Component
 function ProfileForm({
   user, profile, role, onSaved, isPendingAgent,
 }: {
-  user: ReturnType<typeof useAuth>["user"];
-  profile: ReturnType<typeof useAuth>["profile"];
-  role: ReturnType<typeof useAuth>["role"];
+  user: any;
+  profile: any;
+  role: string;
   onSaved: () => Promise<void>;
   isPendingAgent: boolean;
 }) {
@@ -609,7 +608,6 @@ function ProfileForm({
               value={fullName}
               onChange={(e) => setFullName(e.target.value.slice(0, 100))}
               placeholder="Your full name"
-              autoComplete="name"
             />
           </div>
           <div className="space-y-2">
@@ -619,7 +617,6 @@ function ProfileForm({
               value={phone}
               onChange={(e) => setPhone(e.target.value.slice(0, 40))}
               placeholder="+234 800 000 0000"
-              autoComplete="tel"
             />
           </div>
         </div>
@@ -638,12 +635,7 @@ function ProfileForm({
 
         <div className="space-y-2">
           <Label htmlFor="email">Email address</Label>
-          <Input
-            id="email"
-            value={user?.email ?? ""}
-            disabled
-            className="bg-muted/50 cursor-not-allowed"
-          />
+          <Input id="email" value={user?.email ?? ""} disabled className="bg-muted/50 cursor-not-allowed" />
           <p className="text-xs text-muted-foreground">Email is managed through your account settings.</p>
         </div>
 
@@ -660,19 +652,14 @@ function ProfileForm({
         </div>
       </form>
 
-      {/* Sidebar */}
       <div className="space-y-4">
         <div className="rounded-2xl border bg-card p-5">
           <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-4">Account Details</h3>
           <div className="space-y-3">
             <InfoRow icon={<UserIcon className="h-4 w-4 text-primary" />} label="Account type" value={<span className="capitalize font-medium">{isPendingAgent ? "Pending Agent" : role}</span>} />
             <InfoRow icon={<CheckCircle2 className="h-4 w-4 text-success" />} label="Status" value={<span className="text-success font-medium">Active</span>} />
-            {profile?.phone && (
-              <InfoRow icon={<Phone className="h-4 w-4 text-accent" />} label="Phone" value={profile.phone} />
-            )}
-            {user?.email && (
-              <InfoRow icon={<Mail className="h-4 w-4 text-muted-foreground" />} label="Email" value={user.email} />
-            )}
+            {profile?.phone && <InfoRow icon={<Phone className="h-4 w-4 text-accent" />} label="Phone" value={profile.phone} />}
+            {user?.email && <InfoRow icon={<Mail className="h-4 w-4 text-muted-foreground" />} label="Email" value={user.email} />}
           </div>
         </div>
 
@@ -698,7 +685,7 @@ function ProfileForm({
   );
 }
 
-// ── Small helpers ──
+// Helper Components
 function StatCard({
   label, value, icon, sub, color, onClick, capitalize,
 }: {
