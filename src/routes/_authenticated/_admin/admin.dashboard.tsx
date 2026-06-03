@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Building2, Inbox, Users, Eye, Star, Clock, TrendingUp, TrendingDown, ArrowRight, CheckCircle2, XCircle, UserCheck, UserX, Loader2, Mail, Phone, Briefcase } from "lucide-react";
+import { Building2, Inbox, Users, Eye, Star, Clock, AlertCircle, TrendingUp, TrendingDown, ArrowRight, CheckCircle2, XCircle, UserCheck, UserX, Loader2, Mail, Phone, Briefcase } from "lucide-react";
 import { useProperties } from "@/hooks/useProperties";
 import { useInquiries } from "@/hooks/useInquiries";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
