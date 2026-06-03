@@ -1,18 +1,24 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Heart, Inbox, User as UserIcon, Settings, Home, ArrowRight,
   TrendingUp, Building2, ChevronRight, Plus, Phone, Mail,
-  Star, Loader2, Save, CheckCircle2
+  Star, Loader2, Save, CheckCircle2, MessageSquare, Send
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { useSavedProperties } from "@/hooks/useFavorites";
 import { useInquiries } from "@/hooks/useInquiries";
+import { useConversations, useMessages } from "@/hooks/useMessages";
 import { PropertyGrid } from "@/components/property/PropertyGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
@@ -35,16 +41,16 @@ function DashboardPage() {
   const [tab, setTab] = useState(sp.tab ?? "overview");
   const saved = useSavedProperties();
   const inquiries = useInquiries({ scope: "user" });
+  const { data: conversations } = useConversations();
+  const [selectedChat, setSelectedChat] = useState<any>(null);
+  const [chatModalOpen, setChatModalOpen] = useState(false);
 
   useEffect(() => {
     if (loading) return;
-    // Redirect non-users away from the user dashboard.
-    // Returning null below prevents any flash of user dashboard content.
     if (role === "admin") navigate({ to: "/admin/dashboard" });
     else if (role === "agent") navigate({ to: "/agent" });
   }, [role, loading, navigate]);
 
-  // Show spinner while auth is resolving
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -53,9 +59,6 @@ function DashboardPage() {
     );
   }
 
-  // ← KEY FIX: don't render any user dashboard content for agents/admins.
-  // The useEffect above will navigate them away; returning null prevents
-  // the user dashboard from flashing on screen while that redirect happens.
   if (role === "admin" || role === "agent") {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -74,8 +77,14 @@ function DashboardPage() {
     { value: "overview", icon: <Home className="h-4 w-4" />, label: "Overview" },
     { value: "saved", icon: <Heart className="h-4 w-4" />, label: "Saved", count: saved.data?.length },
     { value: "inquiries", icon: <Inbox className="h-4 w-4" />, label: "Inquiries", count: unreadCount || undefined },
+    { value: "chats", icon: <MessageSquare className="h-4 w-4" />, label: "Messages" },
     { value: "profile", icon: <Settings className="h-4 w-4" />, label: "Profile" },
   ];
+
+  const handleOpenChat = (conversation: any) => {
+    setSelectedChat(conversation);
+    setChatModalOpen(true);
+  };
 
   return (
     <div className="min-h-screen bg-muted/20">
@@ -182,7 +191,6 @@ function DashboardPage() {
               </div>
 
               <div className="space-y-4">
-                {/* Recent inquiries */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-base font-bold">Recent Inquiries</h2>
@@ -220,13 +228,12 @@ function DashboardPage() {
                   </div>
                 </div>
 
-                {/* Quick links */}
                 <div className="rounded-2xl border bg-card p-4 space-y-1">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Quick Links</p>
                   {[
                     { label: "Browse all properties", icon: <Building2 className="h-4 w-4" />, action: () => navigate({ to: "/properties" }) },
-                    { label: "List a property", icon: <Plus className="h-4 w-4" />, action: () => navigate({ to: "/agent" }) },
                     { label: "Saved favourites", icon: <Heart className="h-4 w-4" />, action: () => setTab("saved") },
+                    { label: "Messages", icon: <MessageSquare className="h-4 w-4" />, action: () => setTab("chats") },
                     { label: "Update profile", icon: <UserIcon className="h-4 w-4" />, action: () => setTab("profile") },
                   ].map((link, i) => (
                     <button
@@ -323,24 +330,219 @@ function DashboardPage() {
             )}
           </TabsContent>
 
+          {/* ── CHATS TAB ── */}
+          <TabsContent value="chats" className="mt-0">
+            <Card className="h-[600px] flex flex-col">
+              <CardHeader>
+                <CardTitle>Your Conversations</CardTitle>
+                <CardDescription>Chat with agents about properties you're interested in</CardDescription>
+              </CardHeader>
+              <CardContent className="flex-1 overflow-hidden p-0">
+                {!conversations ? (
+                  <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                ) : conversations.length === 0 ? (
+                  <div className="text-center py-20 text-muted-foreground">
+                    <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                    <p className="font-medium">No conversations yet</p>
+                    <p className="text-sm mt-1">When you message agents about properties, your conversations will appear here.</p>
+                    <Button className="mt-4" onClick={() => navigate({ to: "/properties" })}>
+                      Browse Properties
+                    </Button>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[500px]">
+                    <div className="divide-y">
+                      {conversations.map((conv) => {
+                        const otherUser = conv.other_user;
+                        const property = conv.property;
+                        return (
+                          <div
+                            key={conv.id}
+                            className="flex items-center gap-3 p-4 hover:bg-muted/50 cursor-pointer transition-colors"
+                            onClick={() => handleOpenChat(conv)}
+                          >
+                            <Avatar className="h-12 w-12">
+                              <AvatarFallback className="bg-primary/10 text-primary">
+                                {otherUser?.full_name?.slice(0, 2).toUpperCase() || "A"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <p className="font-semibold">{otherUser?.full_name || "Agent"}</p>
+                                <span className="text-xs text-muted-foreground">
+                                  {formatDistanceToNow(conv.last_message_at)}
+                                </span>
+                              </div>
+                              <p className="text-sm text-muted-foreground truncate">
+                                {property?.title && (
+                                  <span className="text-xs text-primary">Re: {property.title} · </span>
+                                )}
+                                {conv.last_message}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* ── PROFILE ── */}
           <TabsContent value="profile" className="mt-0">
             <ProfileForm user={user} profile={profile} role={role} onSaved={refreshProfile} />
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Chat Modal */}
+      {selectedChat && (
+        <UserChatModal
+          open={chatModalOpen}
+          onOpenChange={setChatModalOpen}
+          conversation={selectedChat}
+          currentUserId={user?.id || ""}
+        />
+      )}
     </div>
   );
 }
 
-// ── Profile Form ──────────────────────────────────────────────────────────────
-function ProfileForm({
-  user, profile, role, onSaved,
-}: {
-  user: ReturnType<typeof useAuth>["user"];
-  profile: ReturnType<typeof useAuth>["profile"];
-  role: ReturnType<typeof useAuth>["role"];
-  onSaved: () => Promise<void>;
+// User Chat Modal Component
+function UserChatModal({ open, onOpenChange, conversation, currentUserId }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  conversation: any;
+  currentUserId: string;
+}) {
+  const [newMessage, setNewMessage] = useState("");
+  const { messages, isLoading, sendMessage, isSending, markAsRead } = useMessages(conversation.id);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const otherUser = conversation.other_user;
+  
+  useEffect(() => { 
+    if (open && conversation.id) markAsRead(); 
+  }, [open, conversation.id]);
+  
+  useEffect(() => { 
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); 
+  }, [messages]);
+  
+  const handleSend = () => { 
+    if (!newMessage.trim()) return; 
+    sendMessage({ 
+      conversationId: conversation.id, 
+      message: newMessage, 
+      receiverId: otherUser?.id 
+    }); 
+    setNewMessage(""); 
+  };
+  
+  const handleKeyPress = (e: React.KeyboardEvent) => { 
+    if (e.key === "Enter" && !e.shiftKey) { 
+      e.preventDefault(); 
+      handleSend(); 
+    } 
+  };
+  
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px] h-[600px] flex flex-col p-0">
+        <DialogHeader className="px-4 py-3 border-b">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                {otherUser?.full_name?.slice(0, 2).toUpperCase() || "A"}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <DialogTitle>{otherUser?.full_name || "Agent"}</DialogTitle>
+              <DialogDescription className="text-xs">
+                {conversation.property?.title && `About: ${conversation.property.title}`}
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+        <ScrollArea className="flex-1 p-4">
+          {isLoading ? (
+            <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          ) : messages.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+              <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No messages yet</p>
+              <p className="text-xs">Start the conversation!</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {messages.map((msg) => {
+                const isOwn = msg.sender_id === currentUserId;
+                return (
+                  <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[75%] ${isOwn ? "order-2" : "order-1"}`}>
+                      <div className={`rounded-2xl px-3 py-2 ${isOwn ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                        <p className="text-sm break-words">{msg.message}</p>
+                      </div>
+                      <div className={`text-xs text-muted-foreground mt-1 ${isOwn ? "text-right" : "text-left"}`}>
+                        {formatDate(msg.created_at)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </ScrollArea>
+        <div className="p-4 border-t flex gap-2">
+          <Textarea 
+            placeholder="Type a message..." 
+            value={newMessage} 
+            onChange={(e) => setNewMessage(e.target.value)} 
+            onKeyPress={handleKeyPress} 
+            disabled={isSending} 
+            className="min-h-[60px] max-h-[100px] resize-none" 
+          />
+          <Button onClick={handleSend} disabled={!newMessage.trim() || isSending} size="icon" className="h-auto">
+            {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Helper Components
+function StatCard({ label, value, icon, sub, color, onClick, capitalize }: {
+  label: string; value: string | number; icon: React.ReactNode;
+  sub: string; color: string; onClick?: () => void; capitalize?: boolean;
+}) {
+  return (
+    <button onClick={onClick} className="rounded-2xl border bg-card p-5 text-left hover:shadow-md transition-all group w-full">
+      <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl mb-3 ${color}`}>{icon}</div>
+      <div className={`text-2xl font-bold mb-0.5 ${capitalize ? "capitalize" : ""}`}>{value}</div>
+      <div className="text-sm font-medium">{label}</div>
+      <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>
+    </button>
+  );
+}
+
+function InquiryBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    unread: "bg-yellow-500/15 text-yellow-700",
+    read: "bg-muted text-muted-foreground",
+    replied: "bg-green-500/15 text-green-700",
+  };
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${map[status] ?? "bg-muted"}`}>
+      {status}
+    </span>
+  );
+}
+
+function ProfileForm({ user, profile, role, onSaved }: {
+  user: any; profile: any; role: string; onSaved: () => Promise<void>;
 }) {
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
   const [phone, setPhone] = useState(profile?.phone ?? "");
@@ -348,7 +550,6 @@ function ProfileForm({
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // Sync when profile loads (async)
   useEffect(() => {
     setFullName(profile?.full_name ?? "");
     setPhone(profile?.phone ?? "");
@@ -358,38 +559,20 @@ function ProfileForm({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return toast.error("Not signed in");
-
     setLoading(true);
     try {
       if (!isSupabaseConfigured || !supabase) {
-        // Mock mode: just update in memory
         await new Promise((r) => setTimeout(r, 500));
-        toast.success("Profile saved! (mock mode — changes won't persist after refresh)");
+        toast.success("Profile saved! (mock mode)");
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
         setLoading(false);
         return;
       }
-
-      const updateData: Record<string, string> = {
-        full_name: fullName.trim(),
-        phone: phone.trim(),
-      };
-      if (role === "agent") {
-        updateData.company_name = company.trim();
-      }
-
-      const { error } = await supabase
-        .from("users")
-        .update(updateData)
-        .eq("id", user.id);
-
-      if (error) {
-        toast.error(error.message);
-        setLoading(false);
-        return;
-      }
-
+      const updateData: Record<string, string> = { full_name: fullName.trim(), phone: phone.trim() };
+      if (role === "agent") updateData.company_name = company.trim();
+      const { error } = await supabase.from("users").update(updateData).eq("id", user.id);
+      if (error) throw new Error(error.message);
       toast.success("Profile saved successfully!");
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -404,152 +587,42 @@ function ProfileForm({
     <div className="grid md:grid-cols-3 gap-6">
       <form className="md:col-span-2 rounded-2xl border bg-card p-6 space-y-5" onSubmit={handleSave}>
         <h3 className="font-semibold text-lg">Personal Information</h3>
-
         <div className="grid sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="fullName">Full name</Label>
-            <Input
-              id="fullName"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value.slice(0, 100))}
-              placeholder="Your full name"
-              autoComplete="name"
-            />
+            <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value.slice(0, 100))} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone">Phone number</Label>
-            <Input
-              id="phone"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.slice(0, 40))}
-              placeholder="+234 800 000 0000"
-              autoComplete="tel"
-            />
+            <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value.slice(0, 40))} />
           </div>
         </div>
-
         {role === "agent" && (
           <div className="space-y-2">
             <Label htmlFor="company">Company / Agency name</Label>
-            <Input
-              id="company"
-              value={company}
-              onChange={(e) => setCompany(e.target.value.slice(0, 100))}
-              placeholder="e.g. Okafor Realty Group"
-            />
+            <Input id="company" value={company} onChange={(e) => setCompany(e.target.value.slice(0, 100))} />
           </div>
         )}
-
         <div className="space-y-2">
           <Label htmlFor="email">Email address</Label>
-          <Input
-            id="email"
-            value={user?.email ?? ""}
-            disabled
-            className="bg-muted/50 cursor-not-allowed"
-          />
-          <p className="text-xs text-muted-foreground">Email is managed through your account settings.</p>
+          <Input id="email" value={user?.email ?? ""} disabled className="bg-muted/50 cursor-not-allowed" />
         </div>
-
-        <div className="pt-1">
-          <Button type="submit" disabled={loading || saved} className="gap-2 min-w-32">
-            {loading ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
-            ) : saved ? (
-              <><CheckCircle2 className="h-4 w-4" /> Saved!</>
-            ) : (
-              <><Save className="h-4 w-4" /> Save changes</>
-            )}
-          </Button>
-        </div>
+        <Button type="submit" disabled={loading || saved} className="gap-2 min-w-32">
+          {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</> : saved ? <><CheckCircle2 className="h-4 w-4" /> Saved!</> : <><Save className="h-4 w-4" /> Save changes</>}
+        </Button>
       </form>
-
-      {/* Sidebar */}
       <div className="space-y-4">
         <div className="rounded-2xl border bg-card p-5">
           <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-4">Account Details</h3>
           <div className="space-y-3">
             <InfoRow icon={<UserIcon className="h-4 w-4 text-primary" />} label="Account type" value={<span className="capitalize font-medium">{role}</span>} />
             <InfoRow icon={<CheckCircle2 className="h-4 w-4 text-success" />} label="Status" value={<span className="text-success font-medium">Active</span>} />
-            {profile?.phone && (
-              <InfoRow icon={<Phone className="h-4 w-4 text-accent" />} label="Phone" value={profile.phone} />
-            )}
-            {user?.email && (
-              <InfoRow icon={<Mail className="h-4 w-4 text-muted-foreground" />} label="Email" value={user.email} />
-            )}
+            {phone && <InfoRow icon={<Phone className="h-4 w-4 text-accent" />} label="Phone" value={phone} />}
+            <InfoRow icon={<Mail className="h-4 w-4 text-muted-foreground" />} label="Email" value={user?.email ?? ""} />
           </div>
-        </div>
-
-        {role === "agent" && (
-          <div className="rounded-2xl border bg-card p-5">
-            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">Agent Tools</h3>
-            <div className="space-y-2">
-              <Link to="/agent" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-muted/50 transition-colors">
-                <Building2 className="h-4 w-4 text-primary" /> My Listings
-                <ChevronRight className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
-              </Link>
-              <Link to="/agent/inquiries" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-muted/50 transition-colors">
-                <Inbox className="h-4 w-4 text-primary" /> Received Inquiries
-                <ChevronRight className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
-              </Link>
-            </div>
-          </div>
-        )}
-
-        <div className="rounded-2xl border bg-primary/5 border-primary/20 p-5">
-          <div className="flex items-center gap-2 mb-2">
-            <Star className="h-4 w-4 text-accent" />
-            <h3 className="font-semibold text-sm">Want to list properties?</h3>
-          </div>
-          <p className="text-xs text-muted-foreground mb-3">
-            {role === "agent"
-              ? "You already have agent access. Head to your portal to add listings."
-              : "Register as an agent to list properties, manage inquiries, and grow your business."}
-          </p>
-          <Link to="/agent">
-            <Button size="sm" variant="outline" className="w-full gap-2">
-              <Plus className="h-3.5 w-3.5" />
-              {role === "agent" ? "Go to Agent Portal" : "List a Property"}
-            </Button>
-          </Link>
         </div>
       </div>
     </div>
-  );
-}
-
-// ── Small helpers ─────────────────────────────────────────────────────────────
-function StatCard({
-  label, value, icon, sub, color, onClick, capitalize,
-}: {
-  label: string; value: string | number; icon: React.ReactNode;
-  sub: string; color: string; onClick?: () => void; capitalize?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="rounded-2xl border bg-card p-5 text-left hover:shadow-md transition-all group w-full"
-    >
-      <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl mb-3 ${color}`}>
-        {icon}
-      </div>
-      <div className={`text-2xl font-bold mb-0.5 ${capitalize ? "capitalize" : ""}`}>{value}</div>
-      <div className="text-sm font-medium">{label}</div>
-      <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>
-    </button>
-  );
-}
-
-function InquiryBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    unread: "bg-warning/15 text-warning-foreground",
-    read: "bg-muted text-muted-foreground",
-    replied: "bg-success/15 text-success",
-  };
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${map[status] ?? "bg-muted"}`}>
-      {status}
-    </span>
   );
 }
 
@@ -563,4 +636,17 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
       </div>
     </div>
   );
+}
+
+function formatDistanceToNow(dateString: string): string {
+  const now = new Date();
+  const diff = now.getTime() - new Date(dateString).getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
+  return formatDate(dateString);
 }
