@@ -1,14 +1,23 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Heart, Inbox, User as UserIcon, Settings, Home, ArrowRight, TrendingUp, Building2, ChevronRight, Plus, Phone, Mail, Star, Loader2, Save, CheckCircle2, Clock } from "lucide-react";
+import {
+  Heart, Inbox, User as UserIcon, Settings, Home, ArrowRight,
+  TrendingUp, Building2, ChevronRight, Plus, Phone, Mail,
+  Star, Loader2, Save, CheckCircle2, Clock, Send, ReplyAll,
+  MessageSquare, ChevronDown, ChevronUp
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/hooks/useAuth";
 import { useSavedProperties } from "@/hooks/useFavorites";
-import { useInquiries } from "@/hooks/useInquiries";
+import { useInquiries, useUpdateInquiryStatus, useSendReply } from "@/hooks/useInquiries";
 import { PropertyGrid } from "@/components/property/PropertyGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
@@ -31,20 +40,22 @@ function DashboardPage() {
   const [tab, setTab] = useState(sp.tab ?? "overview");
   const saved = useSavedProperties();
   const inquiries = useInquiries({ scope: "user" });
+  const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
+  const [replyDialogOpen, setReplyDialogOpen] = useState(false);
+  const [replyMessage, setReplyMessage] = useState("");
+  const [conversationReplies, setConversationReplies] = useState<any[]>([]);
+  const [loadingReplies, setLoadingReplies] = useState(false);
+  const sendReply = useSendReply();
 
   useEffect(() => {
     if (loading) return;
-    // Redirect logic - only redirect fully approved agents and admins
-    // pending_agent users stay on user dashboard
     if (role === "admin") {
       navigate({ to: "/admin/dashboard" });
     } else if (role === "agent") {
       navigate({ to: "/agent" });
     }
-    // pending_agent users are NOT redirected - they stay on user dashboard
   }, [role, loading, navigate]);
 
-  // Show spinner while auth is resolving
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -53,8 +64,6 @@ function DashboardPage() {
     );
   }
 
-  // Don't render user dashboard content for approved agents/admins
-  // pending_agent users CAN see the user dashboard
   if (role === "admin" || role === "agent") {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -69,8 +78,67 @@ function DashboardPage() {
     ? profile.full_name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
     : (user?.email ?? "U").slice(0, 2).toUpperCase();
 
-  // Show pending agent notification if role is pending_agent
   const isPendingAgent = role === "pending_agent";
+
+  const handleOpenConversation = async (inquiry: any) => {
+    setSelectedInquiry(inquiry);
+    setLoadingReplies(true);
+    setReplyDialogOpen(true);
+    
+    // Fetch all replies for this inquiry
+    try {
+      const { data, error } = await supabase
+        .from("inquiries")
+        .select(`
+          *,
+          user:users!inquiries_user_id_fkey(id, full_name, email, role),
+          agent:users!inquiries_agent_id_fkey(id, full_name, email, role)
+        `)
+        .or(`id.eq.${inquiry.id},parent_inquiry_id.eq.${inquiry.id}`)
+        .order("created_at", { ascending: true });
+      
+      if (error) throw error;
+      setConversationReplies(data || []);
+      
+      // Mark as read if any unread messages
+      if (inquiry.status === "unread") {
+        const { data: updateData, error: updateError } = await supabase
+          .from("inquiries")
+          .update({ status: "read" })
+          .eq("id", inquiry.id);
+        if (!updateError) {
+          inquiries.refetch();
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching replies:", error);
+      toast.error("Could not load conversation");
+    } finally {
+      setLoadingReplies(false);
+    }
+  };
+
+  const handleSendReply = async () => {
+    if (!replyMessage.trim() || !selectedInquiry) return;
+    
+    sendReply.mutate({
+      parentInquiryId: selectedInquiry.id,
+      propertyId: selectedInquiry.property_id,
+      agentId: selectedInquiry.agent_id,
+      message: replyMessage.trim()
+    }, {
+      onSuccess: () => {
+        toast.success("Reply sent!");
+        setReplyMessage("");
+        // Refresh conversation
+        handleOpenConversation(selectedInquiry);
+        inquiries.refetch();
+      },
+      onError: (error) => {
+        toast.error(error.message);
+      }
+    });
+  };
 
   const TABS = [
     { value: "overview", icon: <Home className="h-4 w-4" />, label: "Overview" },
@@ -154,7 +222,7 @@ function DashboardPage() {
                 label="Inquiries Sent"
                 value={inquiries.data?.length ?? 0}
                 icon={<Inbox className="h-5 w-5" />}
-                sub={unreadCount > 0 ? `${unreadCount} awaiting reply` : "All caught up"}
+                sub={unreadCount > 0 ? `${unreadCount} with new replies` : "All caught up"}
                 color="text-blue-500 bg-blue-50 dark:bg-blue-950"
                 onClick={() => setTab("inquiries")}
               />
@@ -204,7 +272,11 @@ function DashboardPage() {
                       </div>
                     ) : (
                       (inquiries.data ?? []).slice(0, 4).map((inq) => (
-                        <div key={inq.id} className="p-3 hover:bg-muted/30 transition-colors">
+                        <div 
+                          key={inq.id} 
+                          className="p-3 hover:bg-muted/30 transition-colors cursor-pointer"
+                          onClick={() => handleOpenConversation(inq)}
+                        >
                           <div className="flex items-start gap-2.5">
                             <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                               <Inbox className="h-3.5 w-3.5 text-primary" />
@@ -217,6 +289,7 @@ function DashboardPage() {
                                 <span className="text-xs text-muted-foreground">{formatDate(inq.created_at)}</span>
                               </div>
                             </div>
+                            <ReplyAll className="h-4 w-4 text-muted-foreground shrink-0" />
                           </div>
                         </div>
                       ))
@@ -271,10 +344,10 @@ function DashboardPage() {
             )}
           </TabsContent>
 
-          {/* ── INQUIRIES ── */}
+          {/* ── INQUIRIES TAB WITH CONVERSATION THREAD ── */}
           <TabsContent value="inquiries" className="mt-0">
             <div className="mb-6 flex items-center justify-between">
-              <h2 className="text-xl font-bold">My Inquiries</h2>
+              <h2 className="text-xl font-bold">My Inquiries & Conversations</h2>
               <Badge variant="secondary">{inquiries.data?.length ?? 0} total</Badge>
             </div>
             {inquiries.isLoading ? (
@@ -286,47 +359,14 @@ function DashboardPage() {
                 description="Reach out to agents from any property page."
               />
             ) : (
-              <div className="rounded-2xl border bg-card overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3">Property</th>
-                      <th className="px-4 py-3 hidden sm:table-cell">Message</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3 hidden md:table-cell">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(inquiries.data ?? []).map((inq) => (
-                      <tr key={inq.id} className="border-t hover:bg-muted/30 transition-colors align-top">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            {(inq.property as { images?: string[] } | null)?.images?.[0] && (
-                              <img src={(inq.property as { images?: string[] }).images![0]} alt="" className="h-9 w-12 rounded-lg object-cover shrink-0 hidden sm:block" />
-                            )}
-                            <div>
-                              {(inq.property as { id?: string; title?: string } | null)?.id ? (
-                                <Link to="/property/$id" params={{ id: (inq.property as { id: string }).id }} className="font-medium hover:underline line-clamp-1">
-                                  {(inq.property as { title?: string }).title ?? "Property"}
-                                </Link>
-                              ) : (
-                                <span className="font-medium">Property removed</span>
-                              )}
-                              <div className="text-xs text-muted-foreground">{(inq.property as { city?: string } | null)?.city ?? ""}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground max-w-xs hidden sm:table-cell">
-                          {truncate(inq.message, 60)}
-                        </td>
-                        <td className="px-4 py-3"><InquiryBadge status={inq.status} /></td>
-                        <td className="px-4 py-3 text-muted-foreground whitespace-nowrap hidden md:table-cell">
-                          {formatDate(inq.created_at)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-4">
+                {(inquiries.data ?? []).map((inq) => (
+                  <InquiryCard 
+                    key={inq.id} 
+                    inquiry={inq} 
+                    onOpenConversation={() => handleOpenConversation(inq)}
+                  />
+                ))}
               </div>
             )}
           </TabsContent>
@@ -336,6 +376,147 @@ function DashboardPage() {
             <ProfileForm user={user} profile={profile} role={role} onSaved={refreshProfile} isPendingAgent={isPendingAgent} />
           </TabsContent>
         </Tabs>
+      </div>
+
+      {/* Conversation Dialog */}
+      <Dialog open={replyDialogOpen} onOpenChange={setReplyDialogOpen}>
+        <DialogContent className="sm:max-w-[550px] max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5" />
+              Conversation with Agent
+            </DialogTitle>
+            <DialogDescription>
+              {selectedInquiry?.property?.title && (
+                <span>About: {selectedInquiry.property.title}</span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 pr-4">
+            {loadingReplies ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : conversationReplies.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No messages yet</p>
+              </div>
+            ) : (
+              <div className="space-y-4 py-4">
+                {conversationReplies.map((msg, idx) => {
+                  const isUser = msg.user_id === user?.id;
+                  const senderName = isUser ? "You" : (msg.agent?.full_name || "Agent");
+                  
+                  return (
+                    <div key={msg.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[80%] ${isUser ? "order-2" : "order-1"}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-medium text-muted-foreground">
+                            {senderName}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDate(msg.created_at)}
+                          </span>
+                        </div>
+                        <div className={`rounded-2xl px-4 py-2 ${
+                          isUser 
+                            ? "bg-primary text-primary-foreground" 
+                            : "bg-muted"
+                        }`}>
+                          <p className="text-sm break-words">{msg.message}</p>
+                        </div>
+                        {idx === 0 && !isUser && msg.status === "replied" && (
+                          <p className="text-xs text-green-600 mt-1">✓ Agent has responded</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+          
+          <div className="border-t pt-4 mt-4">
+            <div className="space-y-2">
+              <Label>Your Reply</Label>
+              <Textarea
+                placeholder="Type your message here..."
+                rows={3}
+                value={replyMessage}
+                onChange={(e) => setReplyMessage(e.target.value)}
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setReplyDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSendReply} disabled={!replyMessage.trim() || sendReply.isPending} className="gap-2">
+                  {sendReply.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  Send Reply
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// Inquiry Card Component
+function InquiryCard({ inquiry, onOpenConversation }: { inquiry: any; onOpenConversation: () => void }) {
+  const property = inquiry.property as { id?: string; title?: string; city?: string; images?: string[] } | null;
+  const hasReplies = inquiry.reply_count > 0;
+  const isReplied = inquiry.status === "replied";
+  
+  return (
+    <div className="rounded-2xl border bg-card overflow-hidden hover:shadow-md transition-all">
+      <div className="p-4">
+        <div className="flex gap-4">
+          {property?.images?.[0] && (
+            <img src={property.images[0]} alt="" className="h-16 w-20 rounded-lg object-cover shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between flex-wrap gap-2">
+              <div>
+                <Link 
+                  to="/property/$id" 
+                  params={{ id: property?.id || "" }}
+                  className="font-semibold hover:underline"
+                >
+                  {property?.title || "Unknown Property"}
+                </Link>
+                {property?.city && (
+                  <span className="text-xs text-muted-foreground ml-2">{property.city}</span>
+                )}
+              </div>
+              <InquiryBadge status={inquiry.status} />
+            </div>
+            
+            <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+              {inquiry.message}
+            </p>
+            
+            <div className="flex items-center justify-between mt-3">
+              <div className="text-xs text-muted-foreground">
+                Sent {formatDate(inquiry.created_at)}
+              </div>
+              <Button 
+                size="sm" 
+                variant={isReplied ? "outline" : "default"}
+                className="gap-2"
+                onClick={onOpenConversation}
+              >
+                {isReplied ? (
+                  <><MessageSquare className="h-3.5 w-3.5" /> View Conversation</>
+                ) : (
+                  <><ReplyAll className="h-3.5 w-3.5" /> Reply to Agent</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -371,7 +552,7 @@ function ProfileForm({
     try {
       if (!isSupabaseConfigured || !supabase) {
         await new Promise((r) => setTimeout(r, 500));
-        toast.success("Profile saved! (mock mode — changes won't persist after refresh)");
+        toast.success("Profile saved! (mock mode)");
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
         setLoading(false);
@@ -495,25 +676,21 @@ function ProfileForm({
           </div>
         </div>
 
-        {!isPendingAgent && (
+        {!isPendingAgent && role !== "agent" && (
           <div className="rounded-2xl border bg-primary/5 border-primary/20 p-5">
             <div className="flex items-center gap-2 mb-2">
               <Star className="h-4 w-4 text-accent" />
               <h3 className="font-semibold text-sm">Want to list properties?</h3>
             </div>
             <p className="text-xs text-muted-foreground mb-3">
-              {role === "agent"
-                ? "You already have agent access. Head to your portal to add listings."
-                : "Register as an agent to list properties, manage inquiries, and grow your business."}
+              Apply to become an agent to list properties, manage inquiries, and grow your business.
             </p>
-            {role !== "agent" && (
-              <Link to="/agent">
-                <Button size="sm" variant="outline" className="w-full gap-2">
-                  <Plus className="h-3.5 w-3.5" />
-                  Apply to become an Agent
-                </Button>
-              </Link>
-            )}
+            <Link to="/agent">
+              <Button size="sm" variant="outline" className="w-full gap-2">
+                <Plus className="h-3.5 w-3.5" />
+                Apply to become an Agent
+              </Button>
+            </Link>
           </div>
         )}
       </div>
@@ -551,7 +728,7 @@ function InquiryBadge({ status }: { status: string }) {
   };
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${map[status] ?? "bg-muted"}`}>
-      {status}
+      {status === "replied" ? "Has Reply" : status}
     </span>
   );
 }
