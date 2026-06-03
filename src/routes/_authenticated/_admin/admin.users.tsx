@@ -10,7 +10,7 @@ import { formatDate } from "@/lib/format";
 import { toast } from "sonner";
 import {
   Search, MoreHorizontal, Shield, User as UserIcon, Briefcase,
-  CheckCircle2, XCircle, Mail, Calendar, Filter
+  CheckCircle2, XCircle, Mail, Calendar, Filter, Clock
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -50,7 +50,6 @@ function AdminUsers() {
       
       if (rolesError) {
         console.warn("Could not fetch roles:", rolesError);
-        // Return users with default role
         return users.map(u => ({ ...u, role: "user" as AppRole }));
       }
 
@@ -63,14 +62,14 @@ function AdminUsers() {
         rolesByUser.get(role.user_id)?.push(role.role as AppRole);
       });
 
-      // Resolve effective role: admin > agent > user
+      // Resolve effective role: admin > agent > pending_agent > user
       return users.map((u) => {
         const userRoles = rolesByUser.get(u.id) || [];
-        const resolvedRole: AppRole = userRoles.includes("admin")
-          ? "admin"
-          : userRoles.includes("agent")
-          ? "agent"
-          : "user";
+        let resolvedRole: AppRole = "user";
+        if (userRoles.includes("admin")) resolvedRole = "admin";
+        else if (userRoles.includes("agent")) resolvedRole = "agent";
+        else if (userRoles.includes("pending_agent")) resolvedRole = "pending_agent";
+        else resolvedRole = "user";
         return { ...u, role: resolvedRole } as AppUser;
       });
     },
@@ -97,10 +96,13 @@ function AdminUsers() {
 
       // Remove higher roles when downgrading
       if (role === "user") {
-        await supabase.from("user_roles").delete().eq("user_id", id).in("role", ["agent", "admin"]);
+        await supabase.from("user_roles").delete().eq("user_id", id).in("role", ["agent", "admin", "pending_agent"]);
       }
       if (role === "agent") {
-        await supabase.from("user_roles").delete().eq("user_id", id).eq("role", "admin");
+        await supabase.from("user_roles").delete().eq("user_id", id).in("role", ["admin", "pending_agent"]);
+      }
+      if (role === "pending_agent") {
+        await supabase.from("user_roles").delete().eq("user_id", id).in("role", ["admin", "agent"]);
       }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin_users"] }); toast.success("Role updated"); },
@@ -132,16 +134,18 @@ function AdminUsers() {
 
   const admins = allUsers.filter((u) => u.role === "admin").length;
   const agents = allUsers.filter((u) => u.role === "agent").length;
+  const pendingAgents = allUsers.filter((u) => u.role === "pending_agent").length;
   const regularUsers = allUsers.filter((u) => u.role === "user").length;
   const verified = allUsers.filter((u) => u.is_verified).length;
 
   return (
     <div className="space-y-5">
       {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
           { label: "Total Users", value: allUsers.length, icon: <UserIcon className="h-4 w-4" />, color: "bg-primary/10 text-primary" },
           { label: "Agents", value: agents, icon: <Briefcase className="h-4 w-4" />, color: "bg-blue-100 text-blue-600" },
+          { label: "Pending Agents", value: pendingAgents, icon: <Clock className="h-4 w-4" />, color: "bg-yellow-100 text-yellow-600" },
           { label: "Admins", value: admins, icon: <Shield className="h-4 w-4" />, color: "bg-accent/15 text-accent-foreground" },
           { label: "Verified", value: verified, icon: <CheckCircle2 className="h-4 w-4" />, color: "bg-success/15 text-success" },
         ].map((s) => (
@@ -175,6 +179,7 @@ function AdminUsers() {
             <SelectItem value="all">All roles</SelectItem>
             <SelectItem value="admin">Admin</SelectItem>
             <SelectItem value="agent">Agent</SelectItem>
+            <SelectItem value="pending_agent">Pending Agent</SelectItem>
             <SelectItem value="user">User</SelectItem>
           </SelectContent>
         </Select>
@@ -272,13 +277,13 @@ function AdminUsers() {
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuLabel className="text-xs">Change role</DropdownMenuLabel>
-                        {(["admin", "agent", "user"] as AppRole[]).filter((r) => r !== u.role).map((r) => (
+                        {(["admin", "agent", "pending_agent", "user"] as AppRole[]).filter((r) => r !== u.role).map((r) => (
                           <DropdownMenuItem
                             key={r}
                             className="gap-2 cursor-pointer capitalize"
                             onClick={() => updateRole.mutate({ id: u.id, role: r })}
                           >
-                            <RoleIcon role={r} /> Make {r}
+                            <RoleIcon role={r} /> Make {r === "pending_agent" ? "Pending Agent" : r}
                           </DropdownMenuItem>
                         ))}
                         <DropdownMenuSeparator />
@@ -305,14 +310,15 @@ function AdminUsers() {
 }
 
 function RoleBadge({ role }: { role: AppRole }) {
-  const map = {
+  const map: Record<string, string> = {
     admin: "bg-accent/20 text-accent-foreground border-accent/30",
     agent: "bg-blue-100 text-blue-700 border-blue-200",
     user: "bg-muted text-muted-foreground border-border",
+    pending_agent: "bg-yellow-100 text-yellow-700 border-yellow-200",
   };
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${map[role]}`}>
-      <RoleIcon role={role} /> {role}
+      <RoleIcon role={role} /> {role === "pending_agent" ? "Pending Agent" : role}
     </span>
   );
 }
@@ -320,5 +326,6 @@ function RoleBadge({ role }: { role: AppRole }) {
 function RoleIcon({ role }: { role: AppRole }) {
   if (role === "admin") return <Shield className="h-3 w-3" />;
   if (role === "agent") return <Briefcase className="h-3 w-3" />;
+  if (role === "pending_agent") return <Clock className="h-3 w-3" />;
   return <UserIcon className="h-3 w-3" />;
 }
