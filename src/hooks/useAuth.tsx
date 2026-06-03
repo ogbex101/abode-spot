@@ -1,5 +1,5 @@
 // ============================================
-// Auth Provider — Simplified with proper role handling
+// Auth Provider with Agent Approval Flow
 // ============================================
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
@@ -22,6 +22,7 @@ interface AuthContextValue {
     fullName: string,
     desiredRole?: "user" | "agent"
   ) => Promise<{ error: string | null; needsVerification: boolean }>;
+  applyForAgent: (data: any) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -41,47 +42,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) return;
     
     try {
-      // Fetch user profile
       const { data: prof, error: profError } = await supabase
         .from("users")
         .select("*")
         .eq("id", uid)
         .maybeSingle();
       
-      if (profError) {
-        console.error("Error loading profile:", profError);
-        return;
-      }
-      
+      if (profError) throw profError;
       setProfile((prof as AppUser) ?? null);
       
-      // Fetch user roles
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", uid);
       
-      if (rolesError) {
-        console.error("Error loading roles:", rolesError);
-        return;
-      }
+      if (rolesError) throw rolesError;
       
       const roleList = (roles ?? []).map((r: { role: AppRole }) => r.role);
       
-      // Determine role: admin > agent > user
       let resolvedRole: AppRole = "user";
       if (roleList.includes("admin")) resolvedRole = "admin";
       else if (roleList.includes("agent")) resolvedRole = "agent";
+      else if (roleList.includes("pending_agent")) resolvedRole = "pending_agent";
       else resolvedRole = "user";
       
       setRole(resolvedRole);
       
-      // Update public.users.role for consistency (don't await, let it run in background)
       if (prof && (prof as AppUser).role !== resolvedRole) {
         supabase.from("users").update({ role: resolvedRole }).eq("id", uid);
       }
     } catch (error) {
-      console.error("Error in loadProfileAndRole:", error);
+      console.error("Error loading profile:", error);
     }
   };
 
@@ -111,70 +102,95 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
     
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
-  const signIn: AuthContextValue["signIn"] = async (email, password) => {
+  const signIn = async (email: string, password: string) => {
     if (!supabase) return { error: "Supabase not configured" };
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error?.message ?? null };
   };
 
-  const signUp: AuthContextValue["signUp"] = async (email, password, fullName, desiredRole = "user") => {
+  const signUp = async (email: string, password: string, fullName: string, desiredRole: "user" | "agent" = "user") => {
     if (!supabase) return { error: "Supabase not configured", needsVerification: false };
 
     try {
-      // Sign up - email confirmation should be OFF in Supabase settings
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: { full_name: fullName },
-        },
+        options: { data: { full_name: fullName } },
       });
       
       if (error) return { error: error.message, needsVerification: false };
-      if (!data.user) return { error: "Signup failed — no user returned", needsVerification: false };
+      if (!data.user) return { error: "Signup failed", needsVerification: false };
 
-      // Wait a moment for the database trigger to create the users row
       await new Promise((r) => setTimeout(r, 1000));
 
-      // Upsert the user profile
-      const { error: upsertError } = await supabase.from("users").upsert(
-        {
-          id: data.user.id,
-          email,
-          full_name: fullName,
-          role: desiredRole,
-          is_verified: true,
-        },
-        { onConflict: "id" }
-      );
+      // If signing up as agent, set as pending_agent
+      const initialRole = desiredRole === "agent" ? "pending_agent" : "user";
       
-      if (upsertError) console.error("Error upserting user:", upsertError);
+      await supabase.from("users").upsert({
+        id: data.user.id,
+        email,
+        full_name: fullName,
+        role: initialRole,
+        is_verified: true,
+        agent_status: desiredRole === "agent" ? "pending" : "not_applied",
+      }, { onConflict: "id" });
 
-      // Assign the role in user_roles
+      await supabase.from("user_roles").upsert({ 
+        user_id: data.user.id, 
+        role: initialRole 
+      }, { onConflict: "user_id,role" });
+
+      // If applying as agent, create application record
       if (desiredRole === "agent") {
-        // Add user role first
-        await supabase
-          .from("user_roles")
-          .upsert({ user_id: data.user.id, role: "user" }, { onConflict: "user_id,role" });
-        // Add agent role
-        await supabase
-          .from("user_roles")
-          .upsert({ user_id: data.user.id, role: "agent" }, { onConflict: "user_id,role" });
-      } else {
-        await supabase
-          .from("user_roles")
-          .upsert({ user_id: data.user.id, role: "user" }, { onConflict: "user_id,role" });
+        await supabase.from("agent_applications").insert({
+          user_id: data.user.id,
+          full_name: fullName,
+          email: email,
+          status: "pending",
+        });
       }
 
       return { error: null, needsVerification: false };
     } catch (err) {
       console.error("Signup error:", err);
       return { error: "An unexpected error occurred", needsVerification: false };
+    }
+  };
+
+  const applyForAgent = async (applicationData: any) => {
+    if (!supabase || !user) return { error: "Not logged in" };
+    
+    try {
+      // Update user role to pending_agent
+      await supabase.from("user_roles").upsert({
+        user_id: user.id,
+        role: "pending_agent"
+      }, { onConflict: "user_id,role" });
+      
+      await supabase.from("users").update({
+        role: "pending_agent",
+        agent_status: "pending"
+      }).eq("id", user.id);
+      
+      // Create application
+      const { error } = await supabase.from("agent_applications").insert({
+        user_id: user.id,
+        full_name: applicationData.fullName,
+        email: user.email,
+        phone: applicationData.phone,
+        company_name: applicationData.companyName,
+        license_number: applicationData.licenseNumber,
+        message: applicationData.message,
+        status: "pending",
+      });
+      
+      if (error) throw error;
+      return { error: null };
+    } catch (err) {
+      return { error: (err as Error).message };
     }
   };
 
@@ -189,20 +205,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isVerified = useMemo(() => Boolean(user), [user]);
 
-  const value: AuthContextValue = {
-    user,
-    session,
-    profile,
-    role,
-    isVerified,
-    loading,
-    signIn,
-    signUp,
-    signOut,
-    refreshProfile,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{
+      user, session, profile, role, isVerified, loading,
+      signIn, signUp, applyForAgent, signOut, refreshProfile
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
