@@ -22,7 +22,7 @@ interface AuthContextValue {
     password: string,
     fullName: string,
     desiredRole?: "user" | "agent"
-  ) => Promise<{ error: string | null; needsVerification: boolean }>;
+  ) => Promise<{ error: string | null; needsVerification: boolean; role?: AppRole }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -54,11 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ? "agent"
       : "user";
     setRole(resolved);
-
-    // Keep public.users.role in sync so admin panel and profile display match
-    if (prof && (prof as AppUser).role !== resolved) {
-      await supabase.from("users").update({ role: resolved }).eq("id", uid);
-    }
+    return resolved;
   };
 
   useEffect(() => {
@@ -66,26 +62,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
-        setTimeout(() => loadProfileAndRole(s.user.id), 0);
+        const resolvedRole = await loadProfileAndRole(s.user.id);
+        router.invalidate();
       } else {
         setProfile(null);
         setRole("user");
       }
       queryClient.invalidateQueries();
-      router.invalidate();
     });
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
       setSession(s);
       setUser(s?.user ?? null);
-      if (s?.user) loadProfileAndRole(s.user.id);
+      if (s?.user) await loadProfileAndRole(s.user.id);
       setLoading(false);
     });
     return () => subscription.unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const signIn: AuthContextValue["signIn"] = async (email, password) => {
@@ -97,8 +92,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp: AuthContextValue["signUp"] = async (email, password, fullName, desiredRole = "user") => {
     if (!supabase) return { error: "Supabase not configured", needsVerification: false };
 
-    // Sign up WITHOUT email confirmation — users get immediate access.
-    // Make sure "Enable email confirmations" is OFF in Supabase Dashboard > Auth > Settings.
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -109,22 +102,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) return { error: error.message, needsVerification: false };
     if (!data.user) return { error: "Signup failed — no user returned", needsVerification: false };
 
-    // Auto-confirm the email via our secure Vercel API route so the user
-    // can sign in immediately — no confirmation email required.
-    try {
-      await fetch("/api/confirm-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: data.user.id }),
-      });
-    } catch (confirmErr) {
-      console.warn("Auto-confirm request failed (non-fatal):", confirmErr);
-    }
+    // Wait for the DB trigger to create the users row
+    await new Promise((r) => setTimeout(r, 1500));
 
-    // Wait a moment for the DB trigger to create the users row
-    await new Promise((r) => setTimeout(r, 800));
-
-    // Upsert the user profile (trigger may have already created it)
+    // Upsert the user profile
     await supabase.from("users").upsert(
       {
         id: data.user.id,
@@ -138,11 +119,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Assign the correct role in user_roles
     if (desiredRole === "agent") {
-      // First ensure the default 'user' row exists (from trigger)
       await supabase
         .from("user_roles")
         .upsert({ user_id: data.user.id, role: "user" }, { onConflict: "user_id,role" });
-      // Then add the agent role
       await supabase
         .from("user_roles")
         .upsert({ user_id: data.user.id, role: "agent" }, { onConflict: "user_id,role" });
@@ -152,7 +131,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .upsert({ user_id: data.user.id, role: "user" }, { onConflict: "user_id,role" });
     }
 
-    return { error: null, needsVerification: false };
+    // Wait additional time for role to be fully committed
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // Refresh the session to get the latest role
+    await supabase.auth.refreshSession();
+    
+    // Load the role directly
+    const resolvedRole = await loadProfileAndRole(data.user.id);
+
+    return { error: null, needsVerification: false, role: resolvedRole };
   };
 
   const signOut = async () => {
@@ -164,7 +152,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await loadProfileAndRole(user.id);
   };
 
-  // isVerified is always true — we removed the verification gate
   const isVerified = useMemo(
     () => Boolean(user) || role === "admin",
     [user, role]
