@@ -1,7 +1,7 @@
 export type PropertyType = "house" | "apartment" | "land" | "commercial";
 export type ListingType = "sale" | "rent";
 export type PropertyStatus = "pending" | "approved" | "rejected" | "sold";
-export type AppRole = "admin" | "agent" | "user";
+export type AppRole = "admin" | "agent" | "user" | "pending_agent";
 export type InquiryStatus = "unread" | "read" | "replied";
 
 export interface Property {
