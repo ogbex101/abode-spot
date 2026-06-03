@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Building2, Inbox, Users, Eye, Star, Clock, TrendingUp, TrendingDown, ArrowRight, CheckCircle2, XCircle, UserCheck, UserX, Loader2, Mail, Phone, Briefcase, AlertCircle } from "lucide-react";
+import { Building2, Inbox, Users, Eye, Star, Clock, TrendingUp, TrendingDown, ArrowRight, CheckCircle2, XCircle, UserCheck, UserX, Loader2, Mail, Phone, Briefcase } from "lucide-react";
 import { useProperties } from "@/hooks/useProperties";
 import { useInquiries } from "@/hooks/useInquiries";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +37,8 @@ function AdminDashboard() {
   const { data: applications, isLoading: appsLoading } = useQuery({
     queryKey: ["agent-applications"],
     queryFn: async () => {
+      if (!isSupabaseConfigured || !supabase) return [];
+      
       const { data, error } = await supabase
         .from("agent_applications")
         .select(`
@@ -54,13 +56,16 @@ function AdminDashboard() {
         .order("created_at", { ascending: false });
       
       if (error) throw error;
-      return data;
+      return data || [];
     },
+    enabled: isSupabaseConfigured,
   });
 
   // Approve agent mutation
   const approveAgent = useMutation({
     mutationFn: async ({ userId, applicationId }: { userId: string; applicationId: string }) => {
+      if (!supabase) throw new Error("Supabase not configured");
+      
       // Add agent role
       const { error: roleError } = await supabase
         .from("user_roles")
@@ -107,6 +112,8 @@ function AdminDashboard() {
   // Reject agent mutation
   const rejectAgent = useMutation({
     mutationFn: async ({ userId, applicationId, reason }: { userId: string; applicationId: string; reason: string }) => {
+      if (!supabase) throw new Error("Supabase not configured");
+      
       // Update users table
       const { error: userError } = await supabase
         .from("users")
@@ -280,6 +287,14 @@ function AdminDashboard() {
             <div className="flex justify-center py-20">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
+          ) : !isSupabaseConfigured ? (
+            <Card>
+              <CardContent className="py-20 text-center">
+                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
+                <p className="text-lg font-medium">Supabase not configured</p>
+                <p className="text-sm text-muted-foreground">Please check your environment variables.</p>
+              </CardContent>
+            </Card>
           ) : applications?.length === 0 ? (
             <Card>
               <CardContent className="py-20 text-center">
@@ -307,7 +322,7 @@ function AdminDashboard() {
                     <div className="flex gap-2">
                       <Button
                         size="sm"
-                        className="gap-2 bg-success hover:bg-success/90"
+                        className="gap-2 bg-green-600 hover:bg-green-700"
                         onClick={() => approveAgent.mutate({ userId: app.user_id, applicationId: app.id })}
                         disabled={approveAgent.isPending}
                       >
