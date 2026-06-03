@@ -64,7 +64,7 @@ function Register() {
     
     setLoading(true);
     
-    const { error } = await signUp(
+    const { error, role: assignedRole } = await signUp(
       parsed.data.email,
       parsed.data.password,
       parsed.data.fullName,
@@ -79,17 +79,15 @@ function Register() {
     
     toast.success("Account created! Welcome to AbodeSpot.");
     
-    // Wait longer for the session and role to be properly set in the database
-    // This ensures the agent is correctly redirected to the agent dashboard
+    // Navigate based on the role that was actually assigned
     setTimeout(() => {
       setLoading(false);
-      // Navigate based on selected role
-      if (desiredRole === "agent") {
+      if (desiredRole === "agent" || assignedRole === "agent") {
         navigate({ to: "/agent" });
       } else {
         navigate({ to: "/dashboard" });
       }
-    }, 2500);
+    }, 2000);
   };
 
   return (
