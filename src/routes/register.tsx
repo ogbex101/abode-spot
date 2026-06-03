@@ -57,37 +57,23 @@ function Register() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = schema.safeParse(form);
-    if (!parsed.success) { 
-      toast.error(parsed.error.issues[0].message); 
-      return; 
-    }
-    
+    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
     setLoading(true);
-    
-    const { error, role: assignedRole } = await signUp(
+    const { error } = await signUp(
       parsed.data.email,
       parsed.data.password,
       parsed.data.fullName,
       desiredRole
     );
-    
-    if (error) { 
-      setLoading(false);
-      toast.error(error); 
-      return; 
-    }
-    
+    setLoading(false);
+    if (error) { toast.error(error); return; }
     toast.success("Account created! Welcome to AbodeSpot.");
-    
-    // Navigate based on the role that was actually assigned
-    setTimeout(() => {
-      setLoading(false);
-      if (desiredRole === "agent" || assignedRole === "agent") {
-        navigate({ to: "/agent" });
-      } else {
-        navigate({ to: "/dashboard" });
-      }
-    }, 2000);
+    // Redirect based on role selected during signup
+    if (desiredRole === "agent") {
+      navigate({ to: "/agent" });
+    } else {
+      navigate({ to: "/dashboard" });
+    }
   };
 
   return (
