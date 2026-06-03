@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (rolesError) throw rolesError;
       
-      const roleList = (roles ?? []).map((r: { role: AppRole }) => r.role);
+      const roleList = (roles ?? []).map((r: { role: string }) => r.role);
       
       let resolvedRole: AppRole = "user";
       if (roleList.includes("admin")) resolvedRole = "admin";
@@ -126,7 +126,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       await new Promise((r) => setTimeout(r, 1000));
 
-      // If signing up as agent, set as pending_agent
       const initialRole = desiredRole === "agent" ? "pending_agent" : "user";
       
       await supabase.from("users").upsert({
@@ -143,7 +142,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: initialRole 
       }, { onConflict: "user_id,role" });
 
-      // If applying as agent, create application record
       if (desiredRole === "agent") {
         await supabase.from("agent_applications").insert({
           user_id: data.user.id,
@@ -164,7 +162,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase || !user) return { error: "Not logged in" };
     
     try {
-      // Update user role to pending_agent
       await supabase.from("user_roles").upsert({
         user_id: user.id,
         role: "pending_agent"
@@ -175,7 +172,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         agent_status: "pending"
       }).eq("id", user.id);
       
-      // Create application
       const { error } = await supabase.from("agent_applications").insert({
         user_id: user.id,
         full_name: applicationData.fullName,
