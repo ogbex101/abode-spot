@@ -4,15 +4,23 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { Leaf, ArrowRight, Eye, EyeOff, CheckCircle2, User, Building2 } from "lucide-react";
+import { Leaf, ArrowRight, Eye, EyeOff, CheckCircle2, User, Building2, Phone, Briefcase, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const schema = z.object({
   fullName: z.string().trim().min(2).max(100),
   email: z.string().trim().email(),
   password: z.string().min(8).max(128),
+});
+
+const agentApplicationSchema = z.object({
+  phone: z.string().optional(),
+  companyName: z.string().optional(),
+  licenseNumber: z.string().optional(),
+  message: z.string().max(500).optional(),
 });
 
 export const Route = createFileRoute("/register")({
@@ -39,11 +47,17 @@ const ROLES: { value: DesiredRole; label: string; description: string; perks: st
 ];
 
 function Register() {
-  const { signUp } = useAuth();
+  const { signUp, applyForAgent } = useAuth();
   const navigate = useNavigate();
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [desiredRole, setDesiredRole] = useState<DesiredRole>("user");
   const [form, setForm] = useState({ fullName: "", email: "", password: "" });
+  const [agentForm, setAgentForm] = useState({
+    phone: "",
+    companyName: "",
+    licenseNumber: "",
+    message: "",
+  });
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -57,7 +71,10 @@ function Register() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = schema.safeParse(form);
-    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0].message);
+      return;
+    }
     setLoading(true);
     const { error } = await signUp(
       parsed.data.email,
@@ -66,14 +83,46 @@ function Register() {
       desiredRole
     );
     setLoading(false);
-    if (error) { toast.error(error); return; }
-    toast.success("Account created! Welcome to AbodeSpot.");
-    // Redirect based on role selected during signup
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    
+    toast.success("Account created! Please complete your profile.");
+    
+    // If agent, go to application form, otherwise go to dashboard
     if (desiredRole === "agent") {
-      navigate({ to: "/agent" });
+      setStep(3);
     } else {
       navigate({ to: "/dashboard" });
     }
+  };
+
+  const onSubmitAgentApplication = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const parsed = agentApplicationSchema.safeParse(agentForm);
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message || "Please check your information");
+      return;
+    }
+    
+    setLoading(true);
+    const { error } = await applyForAgent({
+      fullName: form.fullName,
+      phone: agentForm.phone,
+      companyName: agentForm.companyName,
+      licenseNumber: agentForm.licenseNumber,
+      message: agentForm.message,
+    });
+    setLoading(false);
+    
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    
+    toast.success("Application submitted! Admin will review your request.");
+    navigate({ to: "/dashboard" });
   };
 
   return (
@@ -97,7 +146,9 @@ function Register() {
           </div>
           <div>
             <h2 className="text-3xl font-bold mb-6" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
-              {step === 1 ? "Join thousands of happy homebuyers." : `Welcome aboard as ${desiredRole === "agent" ? "an Agent" : "a Buyer"}.`}
+              {step === 1 ? "Join thousands of happy homebuyers." : 
+               step === 2 ? `Welcome aboard as ${desiredRole === "agent" ? "an Agent" : "a Buyer"}.` :
+               "Complete your agent application"}
             </h2>
             <ul className="space-y-3">
               {selectedRole.perks.map((p) => (
@@ -304,6 +355,108 @@ function Register() {
                 Already have an account?{" "}
                 <Link to="/login" className="font-medium text-primary hover:underline">Sign in</Link>
               </p>
+            </div>
+          )}
+
+          {/* ── STEP 3: Agent Application Form ── */}
+          {step === 3 && desiredRole === "agent" && (
+            <div className="animate-fade-up">
+              <button
+                type="button"
+                onClick={() => setStep(2)}
+                className="mb-5 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                ← Back to account details
+              </button>
+
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary">
+                <Building2 className="h-3 w-3" />
+                Agent Application
+              </div>
+
+              <h1 className="mt-3 text-3xl font-bold" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
+                Tell us about yourself
+              </h1>
+              <p className="mt-1.5 text-sm text-muted-foreground">This information helps us verify your credentials.</p>
+
+              <form className="mt-8 space-y-5" onSubmit={onSubmitAgentApplication}>
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-sm font-medium">Phone number</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="+234 800 000 0000"
+                      value={agentForm.phone}
+                      onChange={(e) => setAgentForm({ ...agentForm, phone: e.target.value })}
+                      className="h-11 pl-10"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="company" className="text-sm font-medium">Company / Agency name</Label>
+                  <div className="relative">
+                    <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="company"
+                      placeholder="e.g., Okafor Realty Group"
+                      value={agentForm.companyName}
+                      onChange={(e) => setAgentForm({ ...agentForm, companyName: e.target.value })}
+                      className="h-11 pl-10"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="license" className="text-sm font-medium">License number (if applicable)</Label>
+                  <div className="relative">
+                    <FileText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="license"
+                      placeholder="e.g., RCN 123456"
+                      value={agentForm.licenseNumber}
+                      onChange={(e) => setAgentForm({ ...agentForm, licenseNumber: e.target.value })}
+                      className="h-11 pl-10"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="message" className="text-sm font-medium">Additional information (optional)</Label>
+                  <Textarea
+                    id="message"
+                    placeholder="Tell us about your real estate experience..."
+                    value={agentForm.message}
+                    onChange={(e) => setAgentForm({ ...agentForm, message: e.target.value.slice(0, 500) })}
+                    rows={4}
+                    className="resize-none"
+                  />
+                  <div className="text-right text-xs text-muted-foreground">
+                    {agentForm.message.length}/500
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full h-11 gap-2 font-semibold text-sm shadow-sm hover:shadow-md transition-shadow"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Submitting application…
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">Submit Application <ArrowRight className="h-4 w-4" /></span>
+                  )}
+                </Button>
+
+                <p className="text-xs text-center text-muted-foreground">
+                  Your application will be reviewed by our team. You'll receive an email once approved.
+                </p>
+              </form>
             </div>
           )}
         </div>
