@@ -157,30 +157,40 @@ function AgentHome() {
   };
 
   const handleSendReply = async () => {
-    if (!replyMessage.trim() || !conversationId || !selectedInquiry) return;
+  if (!replyMessage.trim() || !conversationId || !selectedInquiry) return;
+  
+  try {
+    // Dynamic import to ensure supabase is available
+    const { supabase } = await import("@/integrations/supabase/client");
     
-    try {
-      // Send message through the conversation system
-      const { supabase } = await import("@/integrations/supabase/client");
-      await supabase.from("messages").insert({
-        conversation_id: conversationId,
-        sender_id: user?.id,
-        receiver_id: selectedInquiry.user_id,
-        message: replyMessage.trim(),
-        is_read: false,
-      });
-      
-      // Update inquiry status to replied
-      await updateInquiry.mutateAsync({ id: selectedInquiry.id, status: "replied" });
-      
-      toast.success("Reply sent!");
-      setReplyMessage("");
-      setReplyDialogOpen(false);
-    } catch (error) {
-      toast.error("Failed to send reply");
+    // Check if supabase is configured
+    if (!supabase) {
+      toast.error("Database connection not available");
+      return;
     }
-  };
-
+    
+    // Send message through the conversation system
+    const { error } = await supabase.from("messages").insert({
+      conversation_id: conversationId,
+      sender_id: user?.id,
+      receiver_id: selectedInquiry.user_id,
+      message: replyMessage.trim(),
+      is_read: false,
+    });
+    
+    if (error) throw error;
+    
+    // Update inquiry status to replied
+    await updateInquiry.mutateAsync({ id: selectedInquiry.id, status: "replied" });
+    
+    toast.success("Reply sent!");
+    setReplyMessage("");
+    setReplyDialogOpen(false);
+  } catch (error) {
+    console.error("Error sending reply:", error);
+    toast.error("Failed to send reply");
+  }
+};
   const props = myProps.data ?? [];
   const approved = props.filter((p) => p.status === "approved").length;
   const pending = props.filter((p) => p.status === "pending").length;
