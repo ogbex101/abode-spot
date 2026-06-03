@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Heart, Inbox, User as UserIcon, Settings, Home, ArrowRight,
   TrendingUp, Building2, ChevronRight, Plus, Phone, Mail,
-  Star, Loader2, Save, CheckCircle2, MessageSquare, Send
+  Star, Loader2, Save, CheckCircle2, Clock, AlertCircle, Send, Reply
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,13 +12,12 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { useSavedProperties } from "@/hooks/useFavorites";
-import { useInquiries } from "@/hooks/useInquiries";
-import { useConversations, useMessages } from "@/hooks/useMessages";
+import { useInquiries, useUpdateInquiryStatus, useReplyToInquiry } from "@/hooks/useInquiries";
 import { PropertyGrid } from "@/components/property/PropertyGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
@@ -41,20 +40,56 @@ function DashboardPage() {
   const [tab, setTab] = useState(sp.tab ?? "overview");
   const saved = useSavedProperties();
   const inquiries = useInquiries({ scope: "user" });
-  const { data: conversations } = useConversations();
-  const [selectedChat, setSelectedChat] = useState<any>(null);
-  const [chatModalOpen, setChatModalOpen] = useState(false);
+  const updateInquiry = useUpdateInquiryStatus();
+  const replyToInquiry = useReplyToInquiry();
+  
+  const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
+  const [replyMessage, setReplyMessage] = useState("");
+  const [replyDialogOpen, setReplyDialogOpen] = useState(false);
+  const [replyLoading, setReplyLoading] = useState(false);
 
   useEffect(() => {
     if (loading) return;
     if (role === "admin") navigate({ to: "/admin/dashboard" });
     else if (role === "agent") navigate({ to: "/agent" });
+    else if (role === "pending_agent") {
+      // Show pending approval message
+    }
   }, [role, loading, navigate]);
 
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Pending agent view
+  if (role === "pending_agent") {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-24 text-center">
+        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-yellow-500/10">
+          <Clock className="h-10 w-10 text-yellow-500" />
+        </div>
+        <h1 className="text-3xl font-bold" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
+          Application Pending Review
+        </h1>
+        <p className="mt-4 text-muted-foreground leading-relaxed">
+          Thank you for applying to become an agent on AbodeSpot. Our admin team is reviewing your application.
+          You'll receive a notification once your account is approved.
+        </p>
+        <div className="mt-8 p-4 rounded-xl bg-muted/30 border">
+          <p className="text-sm font-medium mb-2">What happens next?</p>
+          <ul className="text-sm text-muted-foreground space-y-1">
+            <li>✓ Admin reviews your application (usually within 24-48 hours)</li>
+            <li>✓ You'll receive an email notification when approved</li>
+            <li>✓ Once approved, you can start listing properties</li>
+          </ul>
+        </div>
+        <Button className="mt-8" onClick={() => navigate({ to: "/properties" })}>
+          Browse Properties
+        </Button>
       </div>
     );
   }
@@ -67,24 +102,53 @@ function DashboardPage() {
     );
   }
 
-  const unreadCount = (inquiries.data ?? []).filter((i) => i.status === "unread").length;
+  const unreadCount = (inquiries.data ?? []).filter((i: any) => i.status === "unread" && !i.is_reply).length;
   const displayName = profile?.full_name ? profile.full_name.split(" ")[0] : "there";
   const initials = profile?.full_name
     ? profile.full_name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
     : (user?.email ?? "U").slice(0, 2).toUpperCase();
 
+  // Group inquiries by parent (show conversation threads)
+  const rootInquiries = (inquiries.data ?? []).filter((i: any) => !i.parent_inquiry_id);
+  const getReplies = (parentId: string) => {
+    return (inquiries.data ?? []).filter((i: any) => i.parent_inquiry_id === parentId);
+  };
+
+  const handleOpenReply = (inquiry: any) => {
+    setSelectedInquiry(inquiry);
+    setReplyMessage("");
+    setReplyDialogOpen(true);
+  };
+
+  const handleSendReply = async () => {
+    if (!replyMessage.trim() || !selectedInquiry) return;
+    
+    setReplyLoading(true);
+    try {
+      await replyToInquiry.mutateAsync({
+        parentInquiryId: selectedInquiry.id,
+        message: replyMessage,
+        agentId: selectedInquiry.agent_id,
+        userId: user?.id || "",
+        propertyId: selectedInquiry.property_id
+      });
+      
+      toast.success("Reply sent!");
+      setReplyMessage("");
+      setReplyDialogOpen(false);
+    } catch (error) {
+      toast.error("Failed to send reply");
+    } finally {
+      setReplyLoading(false);
+    }
+  };
+
   const TABS = [
     { value: "overview", icon: <Home className="h-4 w-4" />, label: "Overview" },
     { value: "saved", icon: <Heart className="h-4 w-4" />, label: "Saved", count: saved.data?.length },
     { value: "inquiries", icon: <Inbox className="h-4 w-4" />, label: "Inquiries", count: unreadCount || undefined },
-    { value: "chats", icon: <MessageSquare className="h-4 w-4" />, label: "Messages" },
     { value: "profile", icon: <Settings className="h-4 w-4" />, label: "Profile" },
   ];
-
-  const handleOpenChat = (conversation: any) => {
-    setSelectedChat(conversation);
-    setChatModalOpen(true);
-  };
 
   return (
     <div className="min-h-screen bg-muted/20">
@@ -105,7 +169,7 @@ function DashboardPage() {
             </div>
             <div className="hidden sm:flex items-center gap-2">
               <Button variant="secondary" size="sm" className="gap-2" onClick={() => navigate({ to: "/agent" })}>
-                <Plus className="h-3.5 w-3.5" /> List Property
+                <Plus className="h-3.5 w-3.5" /> Become an Agent
               </Button>
               <Link to="/properties">
                 <Button variant="outline" size="sm" className="bg-white/10 border-white/20 text-white hover:bg-white/20 gap-2">
@@ -152,7 +216,7 @@ function DashboardPage() {
               />
               <StatCard
                 label="Inquiries Sent"
-                value={inquiries.data?.length ?? 0}
+                value={rootInquiries.length}
                 icon={<Inbox className="h-5 w-5" />}
                 sub={unreadCount > 0 ? `${unreadCount} awaiting reply` : "All caught up"}
                 color="text-blue-500 bg-blue-50 dark:bg-blue-950"
@@ -191,36 +255,48 @@ function DashboardPage() {
               </div>
 
               <div className="space-y-4">
+                {/* Recent inquiries */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-base font-bold">Recent Inquiries</h2>
                   </div>
                   <div className="rounded-2xl border bg-card divide-y overflow-hidden">
-                    {(inquiries.data ?? []).length === 0 ? (
+                    {rootInquiries.length === 0 ? (
                       <div className="p-5 text-center">
                         <TrendingUp className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
                         <p className="text-sm text-muted-foreground">No inquiries yet</p>
                       </div>
                     ) : (
-                      (inquiries.data ?? []).slice(0, 4).map((inq) => (
-                        <div key={inq.id} className="p-3 hover:bg-muted/30 transition-colors">
-                          <div className="flex items-start gap-2.5">
-                            <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                              <Inbox className="h-3.5 w-3.5 text-primary" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{(inq.property as { title?: string } | null)?.title ?? "Property inquiry"}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">{truncate(inq.message, 40)}</p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <InquiryBadge status={inq.status} />
-                                <span className="text-xs text-muted-foreground">{formatDate(inq.created_at)}</span>
+                      rootInquiries.slice(0, 4).map((inq: any) => {
+                        const replies = getReplies(inq.id);
+                        const hasUnreadReplies = replies.some((r: any) => r.status === "unread");
+                        return (
+                          <div key={inq.id} className="p-3 hover:bg-muted/30 transition-colors">
+                            <div className="flex items-start gap-2.5">
+                              <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                                <Inbox className="h-3.5 w-3.5 text-primary" />
                               </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{(inq.property as { title?: string } | null)?.title ?? "Property inquiry"}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">{truncate(inq.message, 40)}</p>
+                                {replies.length > 0 && (
+                                  <p className="text-xs text-primary mt-1">📩 {replies.length} repl{replies.length === 1 ? 'y' : 'ies'}</p>
+                                )}
+                                <div className="flex items-center gap-2 mt-1">
+                                  <InquiryBadge status={inq.status} />
+                                  {hasUnreadReplies && <Badge variant="destructive" className="text-xs">New reply</Badge>}
+                                  <span className="text-xs text-muted-foreground">{formatDate(inq.created_at)}</span>
+                                </div>
+                              </div>
+                              <Button size="sm" variant="ghost" onClick={() => handleOpenReply(inq)} className="gap-1">
+                                <Reply className="h-3 w-3" /> Reply
+                              </Button>
                             </div>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
-                    {(inquiries.data ?? []).length > 4 && (
+                    {rootInquiries.length > 4 && (
                       <button onClick={() => setTab("inquiries")} className="w-full p-3 text-sm text-primary hover:bg-muted/30 transition-colors flex items-center justify-center gap-1">
                         View all <ArrowRight className="h-3.5 w-3.5" />
                       </button>
@@ -228,12 +304,13 @@ function DashboardPage() {
                   </div>
                 </div>
 
+                {/* Quick links */}
                 <div className="rounded-2xl border bg-card p-4 space-y-1">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Quick Links</p>
                   {[
                     { label: "Browse all properties", icon: <Building2 className="h-4 w-4" />, action: () => navigate({ to: "/properties" }) },
+                    { label: "Become an Agent", icon: <Star className="h-4 w-4" />, action: () => navigate({ to: "/agent" }) },
                     { label: "Saved favourites", icon: <Heart className="h-4 w-4" />, action: () => setTab("saved") },
-                    { label: "Messages", icon: <MessageSquare className="h-4 w-4" />, action: () => setTab("chats") },
                     { label: "Update profile", icon: <UserIcon className="h-4 w-4" />, action: () => setTab("profile") },
                   ].map((link, i) => (
                     <button
@@ -270,124 +347,81 @@ function DashboardPage() {
             )}
           </TabsContent>
 
-          {/* ── INQUIRIES ── */}
+          {/* ── INQUIRIES (Conversation Threads) ── */}
           <TabsContent value="inquiries" className="mt-0">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-xl font-bold">My Inquiries</h2>
-              <Badge variant="secondary">{inquiries.data?.length ?? 0} total</Badge>
+              <Badge variant="secondary">{rootInquiries.length} conversations</Badge>
             </div>
             {inquiries.isLoading ? (
               <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-            ) : (inquiries.data ?? []).length === 0 ? (
+            ) : rootInquiries.length === 0 ? (
               <EmptyState
                 icon={<Inbox className="h-6 w-6 text-muted-foreground" />}
                 title="No inquiries yet"
                 description="Reach out to agents from any property page."
               />
             ) : (
-              <div className="rounded-2xl border bg-card overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3">Property</th>
-                      <th className="px-4 py-3 hidden sm:table-cell">Message</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3 hidden md:table-cell">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(inquiries.data ?? []).map((inq) => (
-                      <tr key={inq.id} className="border-t hover:bg-muted/30 transition-colors align-top">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            {(inq.property as { images?: string[] } | null)?.images?.[0] && (
-                              <img src={(inq.property as { images?: string[] }).images![0]} alt="" className="h-9 w-12 rounded-lg object-cover shrink-0 hidden sm:block" />
-                            )}
-                            <div>
-                              {(inq.property as { id?: string; title?: string } | null)?.id ? (
-                                <Link to="/property/$id" params={{ id: (inq.property as { id: string }).id }} className="font-medium hover:underline line-clamp-1">
-                                  {(inq.property as { title?: string }).title ?? "Property"}
-                                </Link>
-                              ) : (
-                                <span className="font-medium">Property removed</span>
-                              )}
-                              <div className="text-xs text-muted-foreground">{(inq.property as { city?: string } | null)?.city ?? ""}</div>
+              <div className="space-y-4">
+                {rootInquiries.map((inq: any) => {
+                  const replies = getReplies(inq.id);
+                  const property = inq.property as { id?: string; title?: string; images?: string[]; city?: string } | null;
+                  const hasUnreadReplies = replies.some((r: any) => r.status === "unread");
+                  
+                  return (
+                    <Card key={inq.id} className={hasUnreadReplies ? "border-primary/50 bg-primary/5" : ""}>
+                      <CardContent className="p-5">
+                        {/* Original Inquiry */}
+                        <div className="flex gap-4">
+                          {property?.images?.[0] && (
+                            <img src={property.images[0]} alt="" className="h-16 w-20 rounded-lg object-cover shrink-0" />
+                          )}
+                          <div className="flex-1">
+                            <Link to="/property/$id" params={{ id: property?.id || "" }} className="font-semibold hover:underline">
+                              {property?.title || "Property"}
+                            </Link>
+                            {property?.city && <span className="text-xs text-muted-foreground ml-2">{property.city}</span>}
+                            <p className="text-sm mt-2 p-3 bg-muted/30 rounded-lg">"{inq.message}"</p>
+                            <div className="flex items-center justify-between mt-3">
+                              <div className="flex items-center gap-2">
+                                <InquiryBadge status={inq.status} />
+                                <span className="text-xs text-muted-foreground">{formatDate(inq.created_at)}</span>
+                              </div>
+                              <Button size="sm" onClick={() => handleOpenReply(inq)} className="gap-2">
+                                <Reply className="h-3.5 w-3.5" /> Reply
+                              </Button>
                             </div>
                           </div>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground max-w-xs hidden sm:table-cell">
-                          {truncate(inq.message, 60)}
-                        </td>
-                        <td className="px-4 py-3"><InquiryBadge status={inq.status} /></td>
-                        <td className="px-4 py-3 text-muted-foreground whitespace-nowrap hidden md:table-cell">
-                          {formatDate(inq.created_at)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                        
+                        {/* Replies Section */}
+                        {replies.length > 0 && (
+                          <div className="mt-4 pl-4 border-l-2 border-muted">
+                            <p className="text-xs font-medium text-muted-foreground mb-2">Conversation ({replies.length} repl{replies.length === 1 ? 'y' : 'ies'})</p>
+                            <div className="space-y-3">
+                              {replies.map((reply: any) => {
+                                const isAgent = reply.user_id === inq.agent_id;
+                                return (
+                                  <div key={reply.id} className={`p-3 rounded-lg ${isAgent ? 'bg-primary/5 border-l-2 border-primary' : 'bg-muted/30'}`}>
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="text-xs font-medium">
+                                        {isAgent ? 'Agent' : 'You'}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">{formatDate(reply.created_at)}</span>
+                                    </div>
+                                    <p className="text-sm">{reply.message}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
-          </TabsContent>
-
-          {/* ── CHATS TAB ── */}
-          <TabsContent value="chats" className="mt-0">
-            <Card className="h-[600px] flex flex-col">
-              <CardHeader>
-                <CardTitle>Your Conversations</CardTitle>
-                <CardDescription>Chat with agents about properties you're interested in</CardDescription>
-              </CardHeader>
-              <CardContent className="flex-1 overflow-hidden p-0">
-                {!conversations ? (
-                  <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-                ) : conversations.length === 0 ? (
-                  <div className="text-center py-20 text-muted-foreground">
-                    <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                    <p className="font-medium">No conversations yet</p>
-                    <p className="text-sm mt-1">When you message agents about properties, your conversations will appear here.</p>
-                    <Button className="mt-4" onClick={() => navigate({ to: "/properties" })}>
-                      Browse Properties
-                    </Button>
-                  </div>
-                ) : (
-                  <ScrollArea className="h-[500px]">
-                    <div className="divide-y">
-                      {conversations.map((conv) => {
-                        const otherUser = conv.other_user;
-                        const property = conv.property;
-                        return (
-                          <div
-                            key={conv.id}
-                            className="flex items-center gap-3 p-4 hover:bg-muted/50 cursor-pointer transition-colors"
-                            onClick={() => handleOpenChat(conv)}
-                          >
-                            <Avatar className="h-12 w-12">
-                              <AvatarFallback className="bg-primary/10 text-primary">
-                                {otherUser?.full_name?.slice(0, 2).toUpperCase() || "A"}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <p className="font-semibold">{otherUser?.full_name || "Agent"}</p>
-                                <span className="text-xs text-muted-foreground">
-                                  {formatDistanceToNow(conv.last_message_at)}
-                                </span>
-                              </div>
-                              <p className="text-sm text-muted-foreground truncate">
-                                {property?.title && (
-                                  <span className="text-xs text-primary">Re: {property.title} · </span>
-                                )}
-                                {conv.last_message}
-                              </p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </ScrollArea>
-                )}
-              </CardContent>
-            </Card>
           </TabsContent>
 
           {/* ── PROFILE ── */}
@@ -397,119 +431,40 @@ function DashboardPage() {
         </Tabs>
       </div>
 
-      {/* Chat Modal */}
-      {selectedChat && (
-        <UserChatModal
-          open={chatModalOpen}
-          onOpenChange={setChatModalOpen}
-          conversation={selectedChat}
-          currentUserId={user?.id || ""}
-        />
-      )}
-    </div>
-  );
-}
-
-// User Chat Modal Component
-function UserChatModal({ open, onOpenChange, conversation, currentUserId }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  conversation: any;
-  currentUserId: string;
-}) {
-  const [newMessage, setNewMessage] = useState("");
-  const { messages, isLoading, sendMessage, isSending, markAsRead } = useMessages(conversation.id);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const otherUser = conversation.other_user;
-  
-  useEffect(() => { 
-    if (open && conversation.id) markAsRead(); 
-  }, [open, conversation.id]);
-  
-  useEffect(() => { 
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); 
-  }, [messages]);
-  
-  const handleSend = () => { 
-    if (!newMessage.trim()) return; 
-    sendMessage({ 
-      conversationId: conversation.id, 
-      message: newMessage, 
-      receiverId: otherUser?.id 
-    }); 
-    setNewMessage(""); 
-  };
-  
-  const handleKeyPress = (e: React.KeyboardEvent) => { 
-    if (e.key === "Enter" && !e.shiftKey) { 
-      e.preventDefault(); 
-      handleSend(); 
-    } 
-  };
-  
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] h-[600px] flex flex-col p-0">
-        <DialogHeader className="px-4 py-3 border-b">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                {otherUser?.full_name?.slice(0, 2).toUpperCase() || "A"}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <DialogTitle>{otherUser?.full_name || "Agent"}</DialogTitle>
-              <DialogDescription className="text-xs">
-                {conversation.property?.title && `About: ${conversation.property.title}`}
-              </DialogDescription>
+      {/* Reply Dialog */}
+      <Dialog open={replyDialogOpen} onOpenChange={setReplyDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reply to Agent</DialogTitle>
+            <DialogDescription>
+              Respond about "{selectedInquiry?.property?.title || "Property"}"
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg bg-muted/30 p-3 text-sm">
+              <p className="font-semibold mb-1">Original message:</p>
+              <p className="text-muted-foreground">"{selectedInquiry?.message}"</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Your reply</Label>
+              <Textarea
+                placeholder="Type your response here..."
+                rows={4}
+                value={replyMessage}
+                onChange={(e) => setReplyMessage(e.target.value)}
+              />
             </div>
           </div>
-        </DialogHeader>
-        <ScrollArea className="flex-1 p-4">
-          {isLoading ? (
-            <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-          ) : messages.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground">
-              <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">No messages yet</p>
-              <p className="text-xs">Start the conversation!</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {messages.map((msg) => {
-                const isOwn = msg.sender_id === currentUserId;
-                return (
-                  <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[75%] ${isOwn ? "order-2" : "order-1"}`}>
-                      <div className={`rounded-2xl px-3 py-2 ${isOwn ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                        <p className="text-sm break-words">{msg.message}</p>
-                      </div>
-                      <div className={`text-xs text-muted-foreground mt-1 ${isOwn ? "text-right" : "text-left"}`}>
-                        {formatDate(msg.created_at)}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-        </ScrollArea>
-        <div className="p-4 border-t flex gap-2">
-          <Textarea 
-            placeholder="Type a message..." 
-            value={newMessage} 
-            onChange={(e) => setNewMessage(e.target.value)} 
-            onKeyPress={handleKeyPress} 
-            disabled={isSending} 
-            className="min-h-[60px] max-h-[100px] resize-none" 
-          />
-          <Button onClick={handleSend} disabled={!newMessage.trim() || isSending} size="icon" className="h-auto">
-            {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setReplyDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSendReply} disabled={!replyMessage.trim() || replyLoading} className="gap-2">
+              {replyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Send Reply
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
@@ -621,6 +576,15 @@ function ProfileForm({ user, profile, role, onSaved }: {
             <InfoRow icon={<Mail className="h-4 w-4 text-muted-foreground" />} label="Email" value={user?.email ?? ""} />
           </div>
         </div>
+        {role === "agent" && (
+          <div className="rounded-2xl border bg-card p-5">
+            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">Agent Tools</h3>
+            <Link to="/agent" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-muted/50 transition-colors">
+              <Building2 className="h-4 w-4 text-primary" /> Go to Agent Portal
+              <ChevronRight className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -636,17 +600,4 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
       </div>
     </div>
   );
-}
-
-function formatDistanceToNow(dateString: string): string {
-  const now = new Date();
-  const diff = now.getTime() - new Date(dateString).getTime();
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return formatDate(dateString);
 }
