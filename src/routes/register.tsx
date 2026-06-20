@@ -42,7 +42,7 @@ const ROLES: { value: DesiredRole; label: string; description: string; perks: st
     label: "I'm an Agent / Seller",
     description: "I want to list properties for sale or rent",
     icon: <Building2 className="h-5 w-5" />,
-    perks: ["List unlimited properties", "Manage inquiries", "Track listing views", "Featured placement"],
+    perks: ["List unlimited properties", "Manage chat rooms", "Track listing views", "Featured placement"],
   },
 ];
 

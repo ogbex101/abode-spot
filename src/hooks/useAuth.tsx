@@ -137,19 +137,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         agent_status: desiredRole === "agent" ? "pending" : "not_applied",
       }, { onConflict: "id" });
 
-      await supabase.from("user_roles").upsert({ 
+      const { error: roleError } = await supabase.from("user_roles").upsert({ 
         user_id: data.user.id, 
         role: initialRole 
-      }, { onConflict: "user_id,role" });
-
-      if (desiredRole === "agent") {
-        await supabase.from("agent_applications").insert({
-          user_id: data.user.id,
-          full_name: fullName,
-          email: email,
-          status: "pending",
-        });
-      }
+      }, { onConflict: "user_id,role", ignoreDuplicates: true });
+      if (roleError) throw roleError;
 
       return { error: null, needsVerification: false };
     } catch (err) {
@@ -162,15 +154,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase || !user) return { error: "Not logged in" };
     
     try {
-      await supabase.from("user_roles").upsert({
+      const { error: roleError } = await supabase.from("user_roles").upsert({
         user_id: user.id,
         role: "pending_agent"
-      }, { onConflict: "user_id,role" });
+      }, { onConflict: "user_id,role", ignoreDuplicates: true });
+      if (roleError) throw roleError;
       
-      await supabase.from("users").update({
+      const { error: userError } = await supabase.from("users").update({
         role: "pending_agent",
         agent_status: "pending"
       }).eq("id", user.id);
+      if (userError) throw userError;
       
       const { error } = await supabase.from("agent_applications").insert({
         user_id: user.id,

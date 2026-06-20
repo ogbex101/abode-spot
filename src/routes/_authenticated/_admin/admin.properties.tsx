@@ -50,7 +50,8 @@ function AdminProperties() {
   const toggleOne = (id: string) => {
     setSelected((s) => {
       const next = new Set(s);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -156,21 +157,40 @@ function AdminProperties() {
                 <td className="px-4 py-3">{formatDate(p.created_at)}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1">
-                    <Link to="/property/$id" params={{ id: p.id }}><Button size="icon" variant="ghost"><Eye className="h-4 w-4" /></Button></Link>
+                    <Link to="/property/$id" params={{ id: p.id }}>
+                      <Button size="icon" variant="ghost" aria-label={`View ${p.title}`}>
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </Link>
                     {p.status !== "approved" && (
-                      <Button size="icon" variant="ghost" onClick={() => act(() => updateStatus.mutateAsync({ id: p.id, status: "approved" }), "Approved")}>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Approve ${p.title}`}
+                        onClick={() => act(() => updateStatus.mutateAsync({ id: p.id, status: "approved" }), "Approved")}
+                      >
                         <Check className="h-4 w-4 text-success" />
                       </Button>
                     )}
                     {p.status !== "rejected" && (
-                      <Button size="icon" variant="ghost" onClick={() => act(() => updateStatus.mutateAsync({ id: p.id, status: "rejected" }), "Rejected")}>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Reject ${p.title}`}
+                        onClick={() => act(() => updateStatus.mutateAsync({ id: p.id, status: "rejected" }), "Rejected")}
+                      >
                         <X className="h-4 w-4 text-destructive" />
                       </Button>
                     )}
-                    <Button size="icon" variant="ghost" onClick={() => act(() => toggleFeat.mutateAsync({ id: p.id, featured: !p.featured }), p.featured ? "Unfeatured" : "Featured")}>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`${p.featured ? "Unfeature" : "Feature"} ${p.title}`}
+                      onClick={() => act(() => toggleFeat.mutateAsync({ id: p.id, featured: !p.featured }), p.featured ? "Unfeatured" : "Featured")}
+                    >
                       <Star className={"h-4 w-4 " + (p.featured ? "fill-accent text-accent" : "")} />
                     </Button>
-                    <Button size="icon" variant="ghost" onClick={() => {
+                    <Button size="icon" variant="ghost" aria-label={`Delete ${p.title}`} onClick={() => {
                       if (confirm("Delete this property?")) act(() => del.mutateAsync(p.id), "Deleted");
                     }}>
                       <Trash2 className="h-4 w-4 text-destructive" />

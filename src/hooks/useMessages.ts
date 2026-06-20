@@ -1,28 +1,42 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
-import { useEffect } from "react";
+
+export type ConversationType = "property" | "direct";
+
+export type ConversationParticipant = {
+  id: string;
+  full_name: string | null;
+  email: string;
+  avatar_url?: string | null;
+  role?: string | null;
+  company_name?: string | null;
+};
 
 export type Conversation = {
   id: string;
-  property_id: string;
+  property_id: string | null;
   user_id: string;
   agent_id: string;
+  conversation_type: ConversationType;
+  participant_a_id: string;
+  participant_b_id: string;
+  created_by: string | null;
   last_message: string;
   last_message_at: string;
+  unread_count: number;
   created_at: string;
   updated_at: string;
   property?: {
     id: string;
     title: string;
     images: string[];
-  };
-  other_user?: {
-    id: string;
-    full_name: string;
-    email: string;
-    avatar_url?: string;
-  };
+    agent_id?: string | null;
+  } | null;
+  participant_a?: ConversationParticipant | null;
+  participant_b?: ConversationParticipant | null;
+  other_user?: ConversationParticipant | null;
 };
 
 export type Message = {
@@ -36,36 +50,125 @@ export type Message = {
   created_at: string;
 };
 
+type CreateConversationInput = {
+  otherUserId: string;
+  propertyId?: string | null;
+  initialMessage?: string;
+  conversationType?: ConversationType;
+  sendInitialMessage?: boolean;
+};
+
+export function orderedParticipants(userId: string, otherUserId: string): [string, string] {
+  if (userId === otherUserId) {
+    throw new Error("You cannot start a chat with yourself");
+  }
+  return userId < otherUserId ? [userId, otherUserId] : [otherUserId, userId];
+}
+
+function withOtherUser(conversation: any, currentUserId: string): Conversation {
+  return {
+    ...conversation,
+    unread_count: conversation.unread_count ?? 0,
+    other_user:
+      conversation.participant_a_id === currentUserId
+        ? conversation.participant_b
+        : conversation.participant_a,
+  } as Conversation;
+}
+
+async function fetchConversation(conversationId: string, currentUserId: string) {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("conversations")
+    .select(`
+      *,
+      property:properties(id, title, images, agent_id),
+      participant_a:users!conversations_participant_a_id_fkey(id, full_name, email, avatar_url, role, company_name),
+      participant_b:users!conversations_participant_b_id_fkey(id, full_name, email, avatar_url, role, company_name)
+    `)
+    .eq("id", conversationId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data ? withOtherUser(data, currentUserId) : null;
+}
+
 export function useConversations() {
   const { user } = useAuth();
 
   return useQuery({
     queryKey: ["conversations", user?.id],
     queryFn: async () => {
-      if (!user) return [];
-      if (!isSupabaseConfigured || !supabase) return [];
+      if (!user || !isSupabaseConfigured || !supabase) return [];
 
-      // Get conversations where user is either buyer or agent
-      const { data: conversations, error } = await supabase
+      const { data, error } = await supabase
         .from("conversations")
         .select(`
           *,
-          property:properties(id, title, images),
-          user:users!conversations_user_id_fkey(id, full_name, email),
-          agent:users!conversations_agent_id_fkey(id, full_name, email)
+          property:properties(id, title, images, agent_id),
+          participant_a:users!conversations_participant_a_id_fkey(id, full_name, email, avatar_url, role, company_name),
+          participant_b:users!conversations_participant_b_id_fkey(id, full_name, email, avatar_url, role, company_name)
         `)
-        .or(`user_id.eq.${user.id},agent_id.eq.${user.id}`)
+        .or(`participant_a_id.eq.${user.id},participant_b_id.eq.${user.id}`)
         .order("last_message_at", { ascending: false });
 
       if (error) throw new Error(error.message);
+      const unreadCounts = new Map<string, number>();
+      const { data: unreadRows, error: unreadError } = await supabase
+        .from("messages")
+        .select("conversation_id")
+        .eq("receiver_id", user.id)
+        .eq("is_read", false);
 
-      // Format conversations with the other user's info
-      return conversations.map((conv: any) => ({
-        ...conv,
-        other_user: conv.user_id === user.id ? conv.agent : conv.user
-      })) as Conversation[];
+      if (unreadError) throw new Error(unreadError.message);
+
+      (unreadRows ?? []).forEach((row) => {
+        unreadCounts.set(row.conversation_id, (unreadCounts.get(row.conversation_id) ?? 0) + 1);
+      });
+
+      return (data ?? []).map((conversation) => withOtherUser(
+        {
+          ...conversation,
+          unread_count: unreadCounts.get(conversation.id) ?? 0,
+        },
+        user.id,
+      ));
     },
     enabled: !!user,
+  });
+}
+
+export function useConversation(conversationId: string | null) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["conversation", conversationId, user?.id],
+    queryFn: async () => {
+      if (!conversationId || !user || !isSupabaseConfigured || !supabase) return null;
+      return fetchConversation(conversationId, user.id);
+    },
+    enabled: !!conversationId && !!user,
+  });
+}
+
+export function useAgentDirectory() {
+  const { user, role } = useAuth();
+
+  return useQuery({
+    queryKey: ["agent-directory", user?.id],
+    queryFn: async () => {
+      if (!user || !isSupabaseConfigured || !supabase) return [];
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, full_name, email, avatar_url, role, company_name")
+        .eq("role", "agent")
+        .neq("id", user.id)
+        .order("full_name", { ascending: true });
+
+      if (error) throw new Error(error.message);
+      return (data ?? []) as ConversationParticipant[];
+    },
+    enabled: !!user && role === "agent",
   });
 }
 
@@ -73,85 +176,12 @@ export function useMessages(conversationId: string | null) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Real-time subscription for new messages
-  useEffect(() => {
-    if (!conversationId || !supabase) return;
-
-    const subscription = supabase
-      .channel(`messages:${conversationId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload) => {
-          // Update messages cache
-          queryClient.setQueryData(
-            ["messages", conversationId],
-            (oldData: Message[] | undefined) => {
-              return oldData ? [...oldData, payload.new as Message] : [payload.new as Message];
-            }
-          );
-          // Mark as read if received by current user
-          if ((payload.new as Message).receiver_id === user?.id) {
-            markMessagesAsRead.mutate(conversationId);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [conversationId, user?.id]);
-
-  const messagesQuery = useQuery({
-    queryKey: ["messages", conversationId],
-    queryFn: async () => {
-      if (!conversationId) return [];
-      if (!isSupabaseConfigured || !supabase) return [];
-
-      const { data, error } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true });
-
-      if (error) throw new Error(error.message);
-      return data as Message[];
-    },
-    enabled: !!conversationId,
-  });
-
-  const sendMessage = useMutation({
-    mutationFn: async ({ conversationId, message, receiverId }: { conversationId: string; message: string; receiverId: string }) => {
-      if (!user) throw new Error("Not logged in");
-      if (!isSupabaseConfigured || !supabase) throw new Error("Supabase not configured");
-
-      const { error } = await supabase.from("messages").insert({
-        conversation_id: conversationId,
-        sender_id: user.id,
-        receiver_id: receiverId,
-        message: message.trim(),
-        is_read: false,
-      });
-
-      if (error) throw new Error(error.message);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-    },
-  });
-
-  const markMessagesAsRead = useMutation({
+  const {
+    mutate: markMessagesAsRead,
+  } = useMutation({
     mutationFn: async (convId: string) => {
-      if (!user) return;
-      if (!supabase) return;
-      
+      if (!user || !supabase) return;
+
       const { error } = await supabase
         .from("messages")
         .update({ is_read: true, read_at: new Date().toISOString() })
@@ -167,12 +197,102 @@ export function useMessages(conversationId: string | null) {
     },
   });
 
+  const markAsRead = useCallback(() => {
+    if (conversationId) markMessagesAsRead(conversationId);
+  }, [conversationId, markMessagesAsRead]);
+
+  useEffect(() => {
+    if (!conversationId || !supabase) return;
+
+    const subscription = supabase
+      .channel(`messages:${conversationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          queryClient.setQueryData(
+            ["messages", conversationId],
+            (oldData: Message[] | undefined) => {
+              const next = payload.new as Message;
+              if (oldData?.some((message) => message.id === next.id)) return oldData;
+              return oldData ? [...oldData, next] : [next];
+            }
+          );
+          queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          if ((payload.new as Message).receiver_id === user?.id) {
+            markAsRead();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [conversationId, markAsRead, queryClient, user?.id]);
+
+  const messagesQuery = useQuery({
+    queryKey: ["messages", conversationId],
+    queryFn: async () => {
+      if (!conversationId || !isSupabaseConfigured || !supabase) return [];
+
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true });
+
+      if (error) throw new Error(error.message);
+      return data as Message[];
+    },
+    enabled: !!conversationId,
+  });
+
+  const sendMessage = useMutation({
+    mutationFn: async ({
+      conversationId: convId,
+      receiverId,
+      message,
+    }: {
+      conversationId: string;
+      receiverId: string;
+      message: string;
+    }) => {
+      if (!user) throw new Error("Not logged in");
+      if (!isSupabaseConfigured || !supabase) throw new Error("Supabase not configured");
+      if (user.id === receiverId) throw new Error("You cannot send a message to yourself");
+
+      const body = message.trim();
+      if (!body) throw new Error("Message is required");
+
+      const { error } = await supabase.from("messages").insert({
+        conversation_id: convId,
+        sender_id: user.id,
+        receiver_id: receiverId,
+        message: body,
+        is_read: false,
+      });
+
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["messages", variables.conversationId] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+
   return {
     messages: messagesQuery.data || [],
     isLoading: messagesQuery.isLoading,
     sendMessage: sendMessage.mutate,
+    sendMessageAsync: sendMessage.mutateAsync,
     isSending: sendMessage.isPending,
-    markAsRead: () => conversationId && markMessagesAsRead.mutate(conversationId),
+    markAsRead,
   };
 }
 
@@ -181,61 +301,98 @@ export function useCreateConversation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ propertyId, agentId, initialMessage }: { propertyId: string; agentId: string; initialMessage: string }) => {
+    mutationFn: async ({
+      otherUserId,
+      propertyId = null,
+      initialMessage = "",
+      conversationType,
+      sendInitialMessage = true,
+    }: CreateConversationInput) => {
       if (!user) throw new Error("Not logged in");
       if (!isSupabaseConfigured || !supabase) throw new Error("Supabase not configured");
+      if (user.id === otherUserId) throw new Error("You cannot start a chat with yourself");
 
-      // Check if conversation already exists
-      const { data: existing } = await supabase
+      const trimmedMessage = initialMessage.trim();
+      const type: ConversationType = conversationType ?? (propertyId ? "property" : "direct");
+      const [participantAId, participantBId] = orderedParticipants(user.id, otherUserId);
+
+      let existingQuery = supabase
         .from("conversations")
         .select("id")
-        .eq("property_id", propertyId)
-        .eq("user_id", user.id)
-        .eq("agent_id", agentId)
-        .maybeSingle();
+        .eq("conversation_type", type)
+        .eq("participant_a_id", participantAId)
+        .eq("participant_b_id", participantBId);
 
-      if (existing) {
-        // Send message to existing conversation
-        const { error: msgError } = await supabase.from("messages").insert({
-          conversation_id: existing.id,
-          sender_id: user.id,
-          receiver_id: agentId,
-          message: initialMessage.trim(),
-          is_read: false,
-        });
-        if (msgError) throw new Error(msgError.message);
-        return existing.id;
-      }
+      existingQuery = type === "property"
+        ? existingQuery.eq("property_id", propertyId)
+        : existingQuery.is("property_id", null);
 
-      // Create new conversation
-      const { data: conversation, error: convError } = await supabase
-        .from("conversations")
-        .insert({
-          property_id: propertyId,
-          user_id: user.id,
-          agent_id: agentId,
-          last_message: initialMessage,
-        })
-        .select()
-        .single();
+      const { data: existing, error: existingError } = await existingQuery.maybeSingle();
+      if (existingError) throw new Error(existingError.message);
 
-      if (convError) throw new Error(convError.message);
-
-      // Send initial message
-      const { error: msgError } = await supabase.from("messages").insert({
-        conversation_id: conversation.id,
-        sender_id: user.id,
-        receiver_id: agentId,
-        message: initialMessage.trim(),
-        is_read: false,
+      const conversationId = existing?.id ?? await createConversationRow({
+        currentUserId: user.id,
+        otherUserId,
+        participantAId,
+        participantBId,
+        propertyId,
+        type,
+        initialMessage: trimmedMessage,
       });
 
-      if (msgError) throw new Error(msgError.message);
+      if (sendInitialMessage && trimmedMessage) {
+        const { error: messageError } = await supabase.from("messages").insert({
+          conversation_id: conversationId,
+          sender_id: user.id,
+          receiver_id: otherUserId,
+          message: trimmedMessage,
+          is_read: false,
+        });
+        if (messageError) throw new Error(messageError.message);
+      }
 
-      return conversation.id;
+      return conversationId;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     },
   });
+}
+
+async function createConversationRow({
+  currentUserId,
+  otherUserId,
+  participantAId,
+  participantBId,
+  propertyId,
+  type,
+  initialMessage,
+}: {
+  currentUserId: string;
+  otherUserId: string;
+  participantAId: string;
+  participantBId: string;
+  propertyId: string | null;
+  type: ConversationType;
+  initialMessage: string;
+}) {
+  if (!supabase) throw new Error("Supabase not configured");
+
+  const { data: conversation, error } = await supabase
+    .from("conversations")
+    .insert({
+      property_id: type === "property" ? propertyId : null,
+      conversation_type: type,
+      participant_a_id: participantAId,
+      participant_b_id: participantBId,
+      created_by: currentUserId,
+      user_id: type === "property" ? currentUserId : participantAId,
+      agent_id: type === "property" ? otherUserId : participantBId,
+      last_message: initialMessage,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(error.message);
+  return conversation.id as string;
 }

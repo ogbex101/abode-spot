@@ -1,15 +1,14 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Bed, Bath, Square, MapPin, Heart, Share2, Phone, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProperty, useProperties } from "@/hooks/useProperties";
 import { useSavedIds, useToggleSave } from "@/hooks/useFavorites";
-import { useCreateInquiry } from "@/hooks/useInquiries";
+import { useCreateConversation } from "@/hooks/useMessages";
 import { useAuth } from "@/hooks/useAuth";
 import { formatPrice } from "@/lib/format";
 import { PROPERTY_FEATURES } from "@/lib/constants";
@@ -20,6 +19,8 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/property/$id")({
   component: PropertyDetail,
 });
+
+const FALLBACK_PROPERTY_IMAGE = "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=1200";
 
 function PropertyDetail() {
   const { id } = Route.useParams();
@@ -43,7 +44,7 @@ function PropertyDetail() {
   if (!property) throw notFound();
 
   const saved = savedIds.includes(property.id);
-  const images = property.images.length ? property.images : [];
+  const images = property.images.length ? property.images : [FALLBACK_PROPERTY_IMAGE];
   const similarItems = (similar.data ?? []).filter((p) => p.id !== property.id).slice(0, 4);
 
   return (
@@ -100,6 +101,7 @@ function PropertyDetail() {
                 <Button
                   variant="outline"
                   size="icon"
+                  aria-label={saved ? "Unsave property" : "Save property"}
                   onClick={() => toggle.mutate({ propertyId: property.id, currentlySaved: saved })}
                 >
                   <Heart className={cn("h-4 w-4", saved && "fill-destructive text-destructive")} />
@@ -107,6 +109,7 @@ function PropertyDetail() {
                 <Button
                   variant="outline"
                   size="icon"
+                  aria-label="Copy property link"
                   onClick={() => {
                     if (typeof window !== "undefined") {
                       navigator.clipboard.writeText(window.location.href);
@@ -185,7 +188,8 @@ function KV({ icon, label, value }: { icon: React.ReactNode; label: string; valu
 
 function AgentSidebar({ propertyId, agent }: { propertyId: string; agent?: import("@/lib/types").AppUser | null }) {
   const { user } = useAuth();
-  const create = useCreateInquiry();
+  const navigate = useNavigate();
+  const create = useCreateConversation();
   const [message, setMessage] = useState("");
 
   return (
@@ -222,16 +226,30 @@ function AgentSidebar({ propertyId, agent }: { propertyId: string; agent?: impor
             toast.error("Please sign in to send an inquiry");
             return;
           }
+          if (!agent?.id) {
+            toast.error("This property does not have an assigned agent");
+            return;
+          }
+          if (agent.id === user.id) {
+            toast.error("You cannot message yourself about your own listing");
+            return;
+          }
           if (message.trim().length < 5) {
             toast.error("Message is too short");
             return;
           }
           create.mutate(
-            { propertyId, message: message.trim() },
             {
-              onSuccess: () => {
-                toast.success("Inquiry sent!");
+              propertyId,
+              otherUserId: agent.id,
+              initialMessage: message.trim(),
+              conversationType: "property",
+            },
+            {
+              onSuccess: (conversationId) => {
+                toast.success("Message sent!");
                 setMessage("");
+                navigate({ to: "/messages", search: { conversation: conversationId } });
               },
               onError: (e: Error) => toast.error(e.message),
             }

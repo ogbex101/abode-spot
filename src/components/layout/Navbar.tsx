@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Heart, Menu, Leaf, LogOut, User as UserIcon, LayoutDashboard, Plus, X, Search, Home, Building2 } from "lucide-react";
+import { Heart, Menu, Leaf, LogOut, User as UserIcon, LayoutDashboard, Plus, X, Search, Home, Building2, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -95,6 +95,9 @@ export function Navbar() {
           {role === "agent" && (
             <NavLink to="/agent" label="Agent Portal" active={path.startsWith("/agent")} />
           )}
+          {user && (
+            <NavLink to="/messages" label="Messages" active={path === "/messages"} />
+          )}
         </nav>
 
         {/* Desktop Actions */}
@@ -125,6 +128,13 @@ export function Navbar() {
               </Badge>
             )}
           </Link>
+          {user && (
+            <Link to="/messages" className="relative">
+              <Button variant="ghost" size="icon" aria-label="Messages">
+                <MessageSquare className="h-4 w-4" />
+              </Button>
+            </Link>
+          )}
 
           {user ? (
             <DropdownMenu>
@@ -155,6 +165,9 @@ export function Navbar() {
                 )}
                 <DropdownMenuItem onClick={() => navigate({ to: "/dashboard" })} className="gap-2 cursor-pointer">
                   <UserIcon className="h-4 w-4" /> My Dashboard
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate({ to: "/messages" })} className="gap-2 cursor-pointer">
+                  <MessageSquare className="h-4 w-4" /> Messages
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate({ to: "/dashboard", search: { tab: "saved" } as never })} className="gap-2 cursor-pointer">
                   <Heart className="h-4 w-4" /> Saved Properties
@@ -210,6 +223,9 @@ export function Navbar() {
           )}
           {user && (
             <MobLink to="/dashboard" label="My Dashboard" icon={<UserIcon className="h-4 w-4" />} active={path === "/dashboard"} onClick={close} />
+          )}
+          {user && (
+            <MobLink to="/messages" label="Messages" icon={<MessageSquare className="h-4 w-4" />} active={path === "/messages"} onClick={close} />
           )}
           {user && (
             <MobLink

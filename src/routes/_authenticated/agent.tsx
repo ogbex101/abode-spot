@@ -2,8 +2,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
 import { 
-  Pencil, Inbox, Plus, Trash2, Eye, BarChart2, Building2, ArrowRight, 
-  Mail, Phone, CheckCircle2, Send, Loader2, ReplyAll
+  Pencil, Inbox, Plus, Trash2, Eye, Building2,
+  Loader2, MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,16 +13,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/hooks/useAuth";
 import { useCreateProperty, useProperties, useDeleteProperty } from "@/hooks/useProperties";
-import { useInquiries, useUpdateInquiryStatus } from "@/hooks/useInquiries";
-import { useCreateConversation, useMessages } from "@/hooks/useMessages";
+import { useConversations, type Conversation } from "@/hooks/useMessages";
 import { PROPERTY_TYPES } from "@/lib/constants";
 import { ImageUpload } from "@/components/property/ImageUpload";
-import { formatPrice, formatDate } from "@/lib/format";
+import { formatPrice } from "@/lib/format";
 import { toast } from "sonner";
 import type { PropertyType, ListingType } from "@/lib/types";
 
@@ -55,21 +51,12 @@ function AgentHome() {
   const navigate = useNavigate();
   const create = useCreateProperty();
   const del = useDeleteProperty();
-  const updateInquiry = useUpdateInquiryStatus();
   const myProps = useProperties({ agentId: user?.id, status: "all" });
-  const inquiries = useInquiries({ scope: "agent" });
-  const createConversation = useCreateConversation();
+  const conversations = useConversations();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [images, setImages] = useState<string[]>([]);
-  const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
-  const [replyMessage, setReplyMessage] = useState("");
-  const [replyDialogOpen, setReplyDialogOpen] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
-  const [chatLoading, setChatLoading] = useState(false);
-
-  const unread = (inquiries.data ?? []).filter((i: any) => i.status === "unread").length;
+  const [activeTab, setActiveTab] = useState("messages");
 
   if (role !== "agent" && role !== "admin") {
     return (
@@ -114,95 +101,24 @@ function AgentHome() {
       toast.success("Property submitted for approval");
       setForm(EMPTY_FORM);
       setImages([]);
+      setActiveTab("listings");
     } catch (e) {
       toast.error((e as Error).message);
     }
   };
 
-  const handleMarkAsRead = async (inquiryId: string) => {
-    try {
-      await updateInquiry.mutateAsync({ id: inquiryId, status: "read" });
-      toast.success("Marked as read");
-    } catch (error) {
-      toast.error("Failed to mark as read");
-    }
-  };
-
-  const handleOpenChat = async (inquiry: any) => {
-    setSelectedInquiry(inquiry);
-    setReplyMessage("");
-    setChatMessages([]);
-    setChatLoading(true);
-    
-    // Create or get conversation
-    try {
-      const convId = await createConversation.mutateAsync({
-        propertyId: inquiry.property_id,
-        agentId: user?.id || "",
-        initialMessage: inquiry.message
-      });
-      setConversationId(convId);
-      
-      // Mark inquiry as read when opening chat
-      if (inquiry.status === "unread") {
-        await updateInquiry.mutateAsync({ id: inquiry.id, status: "read" });
-      }
-    } catch (err) {
-      console.error("Error creating conversation:", err);
-    } finally {
-      setChatLoading(false);
-    }
-    
-    setReplyDialogOpen(true);
-  };
-
-  const handleSendReply = async () => {
-  if (!replyMessage.trim() || !conversationId || !selectedInquiry) return;
-  
-  try {
-    // Dynamic import to ensure supabase is available
-    const { supabase } = await import("@/integrations/supabase/client");
-    
-    // Check if supabase is configured
-    if (!supabase) {
-      toast.error("Database connection not available");
-      return;
-    }
-    
-    // Send message through the conversation system
-    const { error } = await supabase.from("messages").insert({
-      conversation_id: conversationId,
-      sender_id: user?.id,
-      receiver_id: selectedInquiry.user_id,
-      message: replyMessage.trim(),
-      is_read: false,
-    });
-    
-    if (error) throw error;
-    
-    // Update inquiry status to replied
-    await updateInquiry.mutateAsync({ id: selectedInquiry.id, status: "replied" });
-    
-    toast.success("Reply sent!");
-    setReplyMessage("");
-    setReplyDialogOpen(false);
-  } catch (error) {
-    console.error("Error sending reply:", error);
-    toast.error("Failed to send reply");
-  }
-};
   const props = myProps.data ?? [];
   const approved = props.filter((p) => p.status === "approved").length;
   const pending = props.filter((p) => p.status === "pending").length;
-  const totalViews = props.reduce((s, p) => s + (p.views ?? 0), 0);
-  const inquiryItems = inquiries.data ?? [];
+  const conversationItems = conversations.data ?? [];
+  const unreadMessages = conversationItems.reduce((count, conversation) => count + conversation.unread_count, 0);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold">Agent Dashboard</h1>
-          <p className="text-muted-foreground">Manage your listings and respond to buyer inquiries.</p>
+          <p className="text-muted-foreground">Manage your listings and reply from shared chat rooms.</p>
         </div>
       </div>
 
@@ -211,7 +127,7 @@ function AgentHome() {
           { label: "Total listings", value: props.length, icon: <Building2 className="h-4 w-4" />, color: "bg-primary/10 text-primary" },
           { label: "Live listings", value: approved, icon: <Eye className="h-4 w-4" />, color: "bg-success/10 text-success" },
           { label: "Pending", value: pending, icon: <Plus className="h-4 w-4" />, color: "bg-warning/10 text-warning-foreground" },
-          { label: "Inquiries", value: unread, icon: <Inbox className="h-4 w-4" />, color: "bg-destructive/10 text-destructive" },
+          { label: "Unread messages", value: unreadMessages, icon: <Inbox className="h-4 w-4" />, color: "bg-destructive/10 text-destructive" },
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border bg-card p-4">
             <div className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${s.color} mb-2`}>{s.icon}</div>
@@ -221,86 +137,51 @@ function AgentHome() {
         ))}
       </div>
 
-      <Tabs defaultValue="inquiries" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
-          <TabsTrigger value="inquiries" className="gap-2">
-            <Inbox className="h-4 w-4" /> Inquiries
-            {unread > 0 && (
-              <Badge variant="destructive" className="ml-1 h-5 w-5 rounded-full p-0 text-xs">{unread}</Badge>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
+          <TabsTrigger value="messages" className="gap-2">
+            <Inbox className="h-4 w-4" /> Messages
+            {unreadMessages > 0 && (
+              <Badge variant="destructive" className="ml-1 h-5 min-w-5 rounded-full px-1 text-xs">{unreadMessages}</Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="listings" className="gap-2">
             <Building2 className="h-4 w-4" /> My Listings ({props.length})
           </TabsTrigger>
+          <TabsTrigger value="add" className="gap-2">
+            <Plus className="h-4 w-4" /> Add Property
+          </TabsTrigger>
         </TabsList>
 
-        {/* INQUIRIES TAB - Now with chat functionality */}
-        <TabsContent value="inquiries" className="mt-0">
+        {/* MESSAGES TAB */}
+        <TabsContent value="messages" className="mt-0">
           <Card>
             <CardHeader>
-              <CardTitle>Buyer Inquiries</CardTitle>
-              <CardDescription>View and respond to messages from potential buyers</CardDescription>
+              <CardTitle>Chat Rooms</CardTitle>
+              <CardDescription>Reply to buyers and other agents in the shared messages screen.</CardDescription>
             </CardHeader>
             <CardContent>
-              {inquiries.isLoading ? (
+              {conversations.isLoading ? (
                 <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin" /></div>
-              ) : inquiryItems.length === 0 ? (
+              ) : conversationItems.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground">
                   <Inbox className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                  <p className="font-medium">No inquiries yet</p>
-                  <p className="text-sm mt-1">When buyers message you, they'll appear here.</p>
+                  <p className="font-medium">No chat rooms yet</p>
+                  <p className="text-sm mt-1">When buyers or agents message you, rooms will appear here.</p>
+                  <Button className="mt-4 gap-2" onClick={() => navigate({ to: "/messages" })}>
+                    <MessageSquare className="h-4 w-4" />
+                    Open Messages
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {inquiryItems.map((inq: any) => {
-                    const property = inq.property;
-                    const sender = inq.user;
-                    
-                    return (
-                      <div key={inq.id} className={`rounded-lg border p-4 transition-all ${
-                        inq.status === "unread" ? "border-primary/50 bg-primary/5 shadow-sm" : "bg-card"
-                      }`}>
-                        <div className="flex flex-wrap gap-4">
-                          {property?.images?.[0] && (
-                            <img src={property.images[0]} alt="" className="h-20 w-24 rounded-lg object-cover shrink-0" />
-                          )}
-                          
-                          <div className="flex-1 min-w-0 space-y-2">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <Link to="/property/$id" params={{ id: property?.id }} className="font-semibold hover:underline">
-                                  {property?.title || "Unknown Property"}
-                                </Link>
-                                {property?.city && <span className="text-xs text-muted-foreground ml-2">{property.city}</span>}
-                              </div>
-                              <InquiryStatusBadge status={inq.status} />
-                            </div>
-                            
-                            <div className="bg-muted/30 rounded-lg p-3">
-                              <p className="text-sm font-medium text-muted-foreground mb-1">Buyer's message:</p>
-                              <p className="text-sm">"{inq.message}"</p>
-                            </div>
-                            
-                            <div className="flex flex-wrap items-center gap-4 text-xs">
-                              <span className="font-medium">{sender?.full_name || "Anonymous"}</span>
-                              {sender?.email && <a href={`mailto:${sender.email}`} className="flex items-center gap-1 text-primary hover:underline"><Mail className="h-3 w-3" /> {sender.email}</a>}
-                              {sender?.phone && <a href={`tel:${sender.phone}`} className="flex items-center gap-1"><Phone className="h-3 w-3" /> {sender.phone}</a>}
-                              <span className="text-muted-foreground">{formatDate(inq.created_at)}</span>
-                            </div>
-                          </div>
-                          
-                          <div className="flex flex-col gap-2">
-                            {inq.status === "unread" && (
-                              <Button size="sm" variant="outline" onClick={() => handleMarkAsRead(inq.id)}>Mark as read</Button>
-                            )}
-                            <Button size="sm" onClick={() => handleOpenChat(inq)} className="gap-2">
-                              <ReplyAll className="h-3.5 w-3.5" /> Reply
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {conversationItems.map((conversation) => (
+                    <AgentConversationCard
+                      key={conversation.id}
+                      conversation={conversation}
+                      onOpen={() => navigate({ to: "/messages", search: { conversation: conversation.id } })}
+                    />
+                  ))}
                 </div>
               )}
             </CardContent>
@@ -321,7 +202,7 @@ function AgentHome() {
                 <div className="text-center py-20 text-muted-foreground">
                   <Building2 className="h-12 w-12 mx-auto mb-4 opacity-30" />
                   <p className="font-medium">No listings yet.</p>
-                  <Button className="mt-4" onClick={() => document.querySelector('[value="add"]')?.dispatchEvent(new Event('click'))}>
+                  <Button className="mt-4" onClick={() => setActiveTab("add")}>
                     Add Your First Property
                   </Button>
                 </div>
@@ -358,47 +239,209 @@ function AgentHome() {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
 
-      {/* Reply Dialog */}
-      <Dialog open={replyDialogOpen} onOpenChange={setReplyDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Reply to {selectedInquiry?.user?.full_name || "Buyer"}</DialogTitle>
-            <DialogDescription>Respond to inquiry about "{selectedInquiry?.property?.title}"</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="rounded-lg bg-muted/30 p-3 text-sm">
-              <p className="font-semibold mb-1">Original message:</p>
-              <p className="text-muted-foreground">"{selectedInquiry?.message}"</p>
-            </div>
-            <div className="space-y-2">
-              <Label>Your reply</Label>
-              <Textarea
-                placeholder="Type your response here..."
-                rows={5}
-                value={replyMessage}
-                onChange={(e) => setReplyMessage(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setReplyDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSendReply} disabled={!replyMessage.trim() || chatLoading} className="gap-2">
-              {chatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send Reply
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        {/* ADD PROPERTY TAB */}
+        <TabsContent value="add" className="mt-0">
+          <Card>
+            <CardHeader>
+              <CardTitle>Add Property</CardTitle>
+              <CardDescription>Submit a new listing for admin approval</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={onSubmit} className="space-y-6">
+                <div className="grid gap-5 md:grid-cols-2">
+                  <div className="md:col-span-2 space-y-2">
+                    <Label htmlFor="agent-title">Title *</Label>
+                    <Input
+                      id="agent-title"
+                      required
+                      value={form.title}
+                      onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                      placeholder="e.g. Modern 3-Bedroom Apartment in Lekki"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="agent-property-type">Property Type *</Label>
+                    <Select value={form.property_type} onValueChange={(v) => setForm((f) => ({ ...f, property_type: v as PropertyType }))}>
+                      <SelectTrigger id="agent-property-type"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PROPERTY_TYPES.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="agent-listing-type">Listing Type *</Label>
+                    <Select value={form.listing_type} onValueChange={(v) => setForm((f) => ({ ...f, listing_type: v as ListingType }))}>
+                      <SelectTrigger id="agent-listing-type"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sale">For Sale</SelectItem>
+                        <SelectItem value="rent">For Rent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="agent-price">Price *</Label>
+                    <Input
+                      id="agent-price"
+                      type="number"
+                      min="0"
+                      required
+                      value={form.price}
+                      onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                      placeholder="e.g. 85000000"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="agent-bedrooms">Bedrooms</Label>
+                      <Input
+                        id="agent-bedrooms"
+                        type="number"
+                        min="0"
+                        max="50"
+                        value={form.bedrooms}
+                        onChange={(e) => setForm((f) => ({ ...f, bedrooms: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="agent-bathrooms">Bathrooms</Label>
+                      <Input
+                        id="agent-bathrooms"
+                        type="number"
+                        min="0"
+                        max="50"
+                        step="0.5"
+                        value={form.bathrooms}
+                        onChange={(e) => setForm((f) => ({ ...f, bathrooms: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="agent-area">Area</Label>
+                      <Input
+                        id="agent-area"
+                        type="number"
+                        min="0"
+                        value={form.area_sqft}
+                        onChange={(e) => setForm((f) => ({ ...f, area_sqft: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-2 space-y-2">
+                    <Label htmlFor="agent-description">Description</Label>
+                    <Textarea
+                      id="agent-description"
+                      rows={4}
+                      value={form.description}
+                      onChange={(e) => setForm((f) => ({ ...f, description: e.target.value.slice(0, 2000) }))}
+                      placeholder="Describe the property, condition, nearby landmarks, and key selling points."
+                    />
+                  </div>
+
+                  <div className="md:col-span-2 space-y-2">
+                    <Label htmlFor="agent-address">Address</Label>
+                    <Input
+                      id="agent-address"
+                      value={form.address}
+                      onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="agent-city">City</Label>
+                    <Input
+                      id="agent-city"
+                      value={form.city}
+                      onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="agent-state">State</Label>
+                    <Input
+                      id="agent-state"
+                      value={form.state}
+                      onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <Label>Images</Label>
+                    <p className="text-xs text-muted-foreground">Optional, but better listings should include at least one real photo.</p>
+                  </div>
+                  <ImageUpload value={images} onChange={setImages} pathPrefix={user?.id ?? "agent"} />
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Button type="submit" disabled={create.isPending}>
+                    {create.isPending ? "Submitting..." : "Submit Property"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setForm(EMPTY_FORM);
+                      setImages([]);
+                    }}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
 
-function InquiryStatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    unread: "bg-destructive/15 text-destructive",
-    read: "bg-muted text-muted-foreground",
-    replied: "bg-success/15 text-success",
-  };
-  return <Badge variant="outline" className={styles[status] || "bg-muted"}>{status}</Badge>;
+function AgentConversationCard({ conversation, onOpen }: { conversation: Conversation; onOpen: () => void }) {
+  const property = conversation.property;
+  const otherUser = conversation.other_user;
+
+  return (
+    <div className="rounded-lg border bg-card p-4 transition-all hover:bg-muted/30">
+      <div className="flex flex-wrap gap-4">
+        {property?.images?.[0] && (
+          <img src={property.images[0]} alt="" className="h-20 w-24 shrink-0 rounded-lg object-cover" />
+        )}
+
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="font-semibold">{otherUser?.full_name || otherUser?.email || "Chat room"}</p>
+              {property?.title && (
+                <Link to="/property/$id" params={{ id: property.id }} className="text-xs text-primary hover:underline">
+                  {property.title}
+                </Link>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {conversation.unread_count > 0 && <Badge>{conversation.unread_count} unread</Badge>}
+              <Badge variant="outline">{conversation.conversation_type === "property" ? "Property" : "Direct"}</Badge>
+            </div>
+          </div>
+
+          <p className="rounded-lg bg-muted/30 p-3 text-sm text-muted-foreground">
+            {conversation.last_message || "No messages yet"}
+          </p>
+        </div>
+
+        <div className="flex flex-col justify-center gap-2">
+          <Button size="sm" onClick={onOpen} className="gap-2">
+            <MessageSquare className="h-3.5 w-3.5" /> Open Chat
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }

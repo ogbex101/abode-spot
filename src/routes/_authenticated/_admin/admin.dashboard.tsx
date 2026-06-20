@@ -63,7 +63,7 @@ function AdminDashboard() {
 
   // Approve agent mutation
   const approveAgent = useMutation({
-    mutationFn: async ({ userId, applicationId }: { userId: string; applicationId: string }) => {
+    mutationFn: async ({ userId }: { userId: string }) => {
       if (!supabase) throw new Error("Supabase not configured");
       
       // Add agent role
@@ -87,15 +87,20 @@ function AdminDashboard() {
       if (userError) throw userError;
       
       // Update application
-      const { error: appError } = await supabase
+      const { data: updatedApplications, error: appError } = await supabase
         .from("agent_applications")
         .update({ 
           status: "approved", 
           reviewed_at: new Date().toISOString(),
           admin_notes: "Approved"
         })
-        .eq("id", applicationId);
+        .eq("user_id", userId)
+        .eq("status", "pending")
+        .select("id");
       if (appError) throw appError;
+      if (!updatedApplications?.length) {
+        throw new Error("No pending application was updated");
+      }
       
       return { success: true };
     },
@@ -111,7 +116,7 @@ function AdminDashboard() {
 
   // Reject agent mutation
   const rejectAgent = useMutation({
-    mutationFn: async ({ userId, applicationId, reason }: { userId: string; applicationId: string; reason: string }) => {
+    mutationFn: async ({ userId, reason }: { userId: string; reason: string }) => {
       if (!supabase) throw new Error("Supabase not configured");
       
       // Update users table
@@ -122,15 +127,20 @@ function AdminDashboard() {
       if (userError) throw userError;
       
       // Update application
-      const { error: appError } = await supabase
+      const { data: updatedApplications, error: appError } = await supabase
         .from("agent_applications")
         .update({ 
           status: "rejected", 
           reviewed_at: new Date().toISOString(),
           admin_notes: reason
         })
-        .eq("id", applicationId);
+        .eq("user_id", userId)
+        .eq("status", "pending")
+        .select("id");
       if (appError) throw appError;
+      if (!updatedApplications?.length) {
+        throw new Error("No pending application was updated");
+      }
       
       return { success: true };
     },
@@ -323,7 +333,7 @@ function AdminDashboard() {
                       <Button
                         size="sm"
                         className="gap-2 bg-green-600 hover:bg-green-700"
-                        onClick={() => approveAgent.mutate({ userId: app.user_id, applicationId: app.id })}
+                        onClick={() => approveAgent.mutate({ userId: app.user_id })}
                         disabled={approveAgent.isPending}
                       >
                         {approveAgent.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -480,7 +490,6 @@ function AdminDashboard() {
                 }
                 rejectAgent.mutate({
                   userId: selectedApplication?.user_id,
-                  applicationId: selectedApplication?.id,
                   reason: rejectReason
                 });
               }}

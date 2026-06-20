@@ -16,18 +16,19 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PropertyIdRouteImport } from './routes/property.$id'
+import { Route as AuthenticatedMessagesRouteImport } from './routes/_authenticated/messages'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAgentRouteImport } from './routes/_authenticated/agent'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/_admin'
-import { Route as AuthenticatedAgentInquiriesRouteImport } from './routes/_authenticated/agent.inquiries'
+import { Route as AuthenticatedAgentInquiriesRouteImport } from './routes/_authenticated/agent/inquiries'
 import { Route as AuthenticatedAgentEditIdRouteImport } from './routes/_authenticated/agent.edit.$id'
 import { Route as AuthenticatedAdminAdminUsersRouteImport } from './routes/_authenticated/_admin/admin.users'
 import { Route as AuthenticatedAdminAdminPropertiesRouteImport } from './routes/_authenticated/_admin/admin.properties'
 import { Route as AuthenticatedAdminAdminInquiriesRouteImport } from './routes/_authenticated/_admin/admin.inquiries'
+import { Route as AuthenticatedAdminAdminHomepageRouteImport } from './routes/_authenticated/_admin/admin.homepage'
 import { Route as AuthenticatedAdminAdminFeaturedRouteImport } from './routes/_authenticated/_admin/admin.featured'
 import { Route as AuthenticatedAdminAdminDashboardRouteImport } from './routes/_authenticated/_admin/admin.dashboard'
 import { Route as AuthenticatedAdminAdminAddPropertyRouteImport } from './routes/_authenticated/_admin/admin.add-property'
-import { Route as AuthenticatedAdminAdminHomepageRouteImport } from './routes/_authenticated/_admin/admin.homepage'
 
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
@@ -62,6 +63,11 @@ const PropertyIdRoute = PropertyIdRouteImport.update({
   id: '/property/$id',
   path: '/property/$id',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedMessagesRoute = AuthenticatedMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
@@ -107,6 +113,12 @@ const AuthenticatedAdminAdminInquiriesRoute =
     path: '/admin/inquiries',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminAdminHomepageRoute =
+  AuthenticatedAdminAdminHomepageRouteImport.update({
+    id: '/admin/homepage',
+    path: '/admin/homepage',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminAdminFeaturedRoute =
   AuthenticatedAdminAdminFeaturedRouteImport.update({
     id: '/admin/featured',
@@ -117,12 +129,6 @@ const AuthenticatedAdminAdminDashboardRoute =
   AuthenticatedAdminAdminDashboardRouteImport.update({
     id: '/admin/dashboard',
     path: '/admin/dashboard',
-    getParentRoute: () => AuthenticatedAdminRoute,
-  } as any)
-const AuthenticatedAdminAdminHomepageRoute =
-  AuthenticatedAdminAdminHomepageRouteImport.update({
-    id: '/admin/homepage',
-    path: '/admin/homepage',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
 const AuthenticatedAdminAdminAddPropertyRoute =
@@ -140,10 +146,10 @@ export interface FileRoutesByFullPath {
   '/verify-email': typeof VerifyEmailRoute
   '/agent': typeof AuthenticatedAgentRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/messages': typeof AuthenticatedMessagesRoute
   '/property/$id': typeof PropertyIdRoute
   '/agent/inquiries': typeof AuthenticatedAgentInquiriesRoute
   '/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
-  '/admin/homepage': typeof AuthenticatedAdminAdminHomepageRoute
   '/admin/dashboard': typeof AuthenticatedAdminAdminDashboardRoute
   '/admin/featured': typeof AuthenticatedAdminAdminFeaturedRoute
   '/admin/homepage': typeof AuthenticatedAdminAdminHomepageRoute
@@ -160,10 +166,10 @@ export interface FileRoutesByTo {
   '/verify-email': typeof VerifyEmailRoute
   '/agent': typeof AuthenticatedAgentRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/messages': typeof AuthenticatedMessagesRoute
   '/property/$id': typeof PropertyIdRoute
   '/agent/inquiries': typeof AuthenticatedAgentInquiriesRoute
   '/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
-  '/admin/homepage': typeof AuthenticatedAdminAdminHomepageRoute
   '/admin/dashboard': typeof AuthenticatedAdminAdminDashboardRoute
   '/admin/featured': typeof AuthenticatedAdminAdminFeaturedRoute
   '/admin/homepage': typeof AuthenticatedAdminAdminHomepageRoute
@@ -183,6 +189,7 @@ export interface FileRoutesById {
   '/_authenticated/_admin': typeof AuthenticatedAdminRouteWithChildren
   '/_authenticated/agent': typeof AuthenticatedAgentRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/messages': typeof AuthenticatedMessagesRoute
   '/property/$id': typeof PropertyIdRoute
   '/_authenticated/agent/inquiries': typeof AuthenticatedAgentInquiriesRoute
   '/_authenticated/_admin/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
@@ -204,6 +211,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/agent'
     | '/dashboard'
+    | '/messages'
     | '/property/$id'
     | '/agent/inquiries'
     | '/admin/add-property'
@@ -223,6 +231,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/agent'
     | '/dashboard'
+    | '/messages'
     | '/property/$id'
     | '/agent/inquiries'
     | '/admin/add-property'
@@ -244,6 +253,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_admin'
     | '/_authenticated/agent'
     | '/_authenticated/dashboard'
+    | '/_authenticated/messages'
     | '/property/$id'
     | '/_authenticated/agent/inquiries'
     | '/_authenticated/_admin/admin/add-property'
@@ -317,6 +327,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PropertyIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/messages': {
+      id: '/_authenticated/messages'
+      path: '/messages'
+      fullPath: '/messages'
+      preLoaderRoute: typeof AuthenticatedMessagesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -373,6 +390,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminInquiriesRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/_admin/admin/homepage': {
+      id: '/_authenticated/_admin/admin/homepage'
+      path: '/admin/homepage'
+      fullPath: '/admin/homepage'
+      preLoaderRoute: typeof AuthenticatedAdminAdminHomepageRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/_admin/admin/featured': {
       id: '/_authenticated/_admin/admin/featured'
       path: '/admin/featured'
@@ -394,21 +418,14 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminAddPropertyRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
-    '/_authenticated/_admin/admin/homepage': {
-      id: '/_authenticated/_admin/admin/homepage'
-      path: '/admin/homepage'
-      fullPath: '/admin/homepage'
-      preLoaderRoute: typeof AuthenticatedAdminAdminHomepageRouteImport
-      parentRoute: typeof AuthenticatedAdminRoute
-    }
   }
 }
 
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAdminAddPropertyRoute: typeof AuthenticatedAdminAdminAddPropertyRoute
-  AuthenticatedAdminAdminHomepageRoute: typeof AuthenticatedAdminAdminHomepageRoute
   AuthenticatedAdminAdminDashboardRoute: typeof AuthenticatedAdminAdminDashboardRoute
   AuthenticatedAdminAdminFeaturedRoute: typeof AuthenticatedAdminAdminFeaturedRoute
+  AuthenticatedAdminAdminHomepageRoute: typeof AuthenticatedAdminAdminHomepageRoute
   AuthenticatedAdminAdminInquiriesRoute: typeof AuthenticatedAdminAdminInquiriesRoute
   AuthenticatedAdminAdminPropertiesRoute: typeof AuthenticatedAdminAdminPropertiesRoute
   AuthenticatedAdminAdminUsersRoute: typeof AuthenticatedAdminAdminUsersRoute
@@ -417,9 +434,9 @@ interface AuthenticatedAdminRouteChildren {
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminAdminAddPropertyRoute:
     AuthenticatedAdminAdminAddPropertyRoute,
-  AuthenticatedAdminAdminHomepageRoute: AuthenticatedAdminAdminHomepageRoute,
   AuthenticatedAdminAdminDashboardRoute: AuthenticatedAdminAdminDashboardRoute,
   AuthenticatedAdminAdminFeaturedRoute: AuthenticatedAdminAdminFeaturedRoute,
+  AuthenticatedAdminAdminHomepageRoute: AuthenticatedAdminAdminHomepageRoute,
   AuthenticatedAdminAdminInquiriesRoute: AuthenticatedAdminAdminInquiriesRoute,
   AuthenticatedAdminAdminPropertiesRoute:
     AuthenticatedAdminAdminPropertiesRoute,
@@ -446,12 +463,14 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
   AuthenticatedAgentRoute: typeof AuthenticatedAgentRouteWithChildren
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedMessagesRoute: typeof AuthenticatedMessagesRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
   AuthenticatedAgentRoute: AuthenticatedAgentRouteWithChildren,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedMessagesRoute: AuthenticatedMessagesRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

@@ -1,27 +1,22 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Heart, Inbox, User as UserIcon, Settings, Home, ArrowRight,
   TrendingUp, Building2, ChevronRight, Plus, Phone, Mail,
-  Star, Loader2, Save, CheckCircle2, Clock, Send, ReplyAll, MessageSquare
+  Star, Loader2, Save, CheckCircle2, Clock, MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/hooks/useAuth";
 import { useSavedProperties } from "@/hooks/useFavorites";
-import { useInquiries, useUpdateInquiryStatus, useSendReply } from "@/hooks/useInquiries";
+import { useConversations, type Conversation } from "@/hooks/useMessages";
 import { PropertyGrid } from "@/components/property/PropertyGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { formatDate, truncate } from "@/lib/format";
 
 interface Search { tab?: string }
 
@@ -36,15 +31,9 @@ function DashboardPage() {
   const { user, profile, role, loading, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const sp = Route.useSearch();
-  const [tab, setTab] = useState(sp.tab ?? "overview");
+  const [tab, setTab] = useState(sp.tab === "inquiries" ? "messages" : sp.tab ?? "overview");
   const saved = useSavedProperties();
-  const inquiries = useInquiries({ scope: "user" });
-  const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
-  const [replyDialogOpen, setReplyDialogOpen] = useState(false);
-  const [replyMessage, setReplyMessage] = useState("");
-  const [conversationReplies, setConversationReplies] = useState<any[]>([]);
-  const [loadingReplies, setLoadingReplies] = useState(false);
-  const sendReply = useSendReply();
+  const conversations = useConversations();
 
   useEffect(() => {
     if (loading) return;
@@ -71,81 +60,18 @@ function DashboardPage() {
     );
   }
 
-  const unreadCount = (inquiries.data ?? []).filter((i) => i.status === "unread").length;
   const displayName = profile?.full_name ? profile.full_name.split(" ")[0] : "there";
   const initials = profile?.full_name
     ? profile.full_name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
     : (user?.email ?? "U").slice(0, 2).toUpperCase();
 
   const isPendingAgent = role === "pending_agent";
-
-  const handleOpenConversation = async (inquiry: any) => {
-    setSelectedInquiry(inquiry);
-    setLoadingReplies(true);
-    setReplyDialogOpen(true);
-    
-    if (!supabase) {
-      toast.error("Database connection not available");
-      setLoadingReplies(false);
-      return;
-    }
-    
-    try {
-      const { data, error } = await supabase
-        .from("inquiries")
-        .select(`
-          *,
-          user:users!inquiries_user_id_fkey(id, full_name, email, role),
-          agent:users!inquiries_agent_id_fkey(id, full_name, email, role)
-        `)
-        .or(`id.eq.${inquiry.id},parent_inquiry_id.eq.${inquiry.id}`)
-        .order("created_at", { ascending: true });
-      
-      if (error) throw error;
-      setConversationReplies(data || []);
-      
-      if (inquiry.status === "unread" && supabase) {
-        const { error: updateError } = await supabase
-          .from("inquiries")
-          .update({ status: "read" })
-          .eq("id", inquiry.id);
-        if (!updateError) {
-          inquiries.refetch();
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching replies:", error);
-      toast.error("Could not load conversation");
-    } finally {
-      setLoadingReplies(false);
-    }
-  };
-
-  const handleSendReply = () => {
-    if (!replyMessage.trim() || !selectedInquiry) return;
-    
-    sendReply.mutate({
-      parentInquiryId: selectedInquiry.id,
-      propertyId: selectedInquiry.property_id,
-      agentId: selectedInquiry.agent_id,
-      message: replyMessage.trim()
-    }, {
-      onSuccess: () => {
-        toast.success("Reply sent!");
-        setReplyMessage("");
-        handleOpenConversation(selectedInquiry);
-        inquiries.refetch();
-      },
-      onError: (error: Error) => {
-        toast.error(error.message);
-      }
-    });
-  };
+  const unreadMessages = conversations.data?.reduce((count, conversation) => count + conversation.unread_count, 0) ?? 0;
 
   const TABS = [
     { value: "overview", icon: <Home className="h-4 w-4" />, label: "Overview" },
     { value: "saved", icon: <Heart className="h-4 w-4" />, label: "Saved", count: saved.data?.length },
-    { value: "inquiries", icon: <Inbox className="h-4 w-4" />, label: "Inquiries", count: unreadCount || undefined },
+    { value: "messages", icon: <Inbox className="h-4 w-4" />, label: "Messages", count: unreadMessages || undefined },
     { value: "profile", icon: <Settings className="h-4 w-4" />, label: "Profile" },
   ];
 
@@ -221,12 +147,12 @@ function DashboardPage() {
                 onClick={() => setTab("saved")}
               />
               <StatCard
-                label="Inquiries Sent"
-                value={inquiries.data?.length ?? 0}
+                label="Chat Rooms"
+                value={conversations.data?.length ?? 0}
                 icon={<Inbox className="h-5 w-5" />}
-                sub={unreadCount > 0 ? `${unreadCount} with new replies` : "All caught up"}
+                sub="Open conversations"
                 color="text-blue-500 bg-blue-50 dark:bg-blue-950"
-                onClick={() => setTab("inquiries")}
+                onClick={() => setTab("messages")}
               />
               <StatCard
                 label="Account Type"
@@ -263,40 +189,43 @@ function DashboardPage() {
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-base font-bold">Recent Inquiries</h2>
+                    <h2 className="text-base font-bold">Recent Messages</h2>
                   </div>
                   <div className="rounded-2xl border bg-card divide-y overflow-hidden">
-                    {(inquiries.data ?? []).length === 0 ? (
+                    {(conversations.data ?? []).length === 0 ? (
                       <div className="p-5 text-center">
                         <TrendingUp className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
-                        <p className="text-sm text-muted-foreground">No inquiries yet</p>
+                        <p className="text-sm text-muted-foreground">No messages yet</p>
                       </div>
                     ) : (
-                      (inquiries.data ?? []).slice(0, 4).map((inq) => (
+                      (conversations.data ?? []).slice(0, 4).map((conversation) => (
                         <div 
-                          key={inq.id} 
+                          key={conversation.id} 
                           className="p-3 hover:bg-muted/30 transition-colors cursor-pointer"
-                          onClick={() => handleOpenConversation(inq)}
+                          onClick={() => navigate({ to: "/messages", search: { conversation: conversation.id } })}
                         >
                           <div className="flex items-start gap-2.5">
                             <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                               <Inbox className="h-3.5 w-3.5 text-primary" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{(inq.property as { title?: string } | null)?.title ?? "Property inquiry"}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">{truncate(inq.message, 40)}</p>
+                              <p className="text-sm font-medium truncate">{conversation.other_user?.full_name || conversation.other_user?.email || "Chat room"}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{conversation.last_message || conversation.property?.title || "No messages yet"}</p>
                               <div className="flex items-center gap-2 mt-1">
-                                <InquiryBadge status={inq.status} />
-                                <span className="text-xs text-muted-foreground">{formatDate(inq.created_at)}</span>
+                                <Badge variant="secondary">{conversation.conversation_type === "property" ? "Property" : "Direct"}</Badge>
+                                {conversation.unread_count > 0 && (
+                                  <Badge>{conversation.unread_count} unread</Badge>
+                                )}
+                                <span className="text-xs text-muted-foreground">{conversation.property?.title ?? "Agent chat"}</span>
                               </div>
                             </div>
-                            <ReplyAll className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
                           </div>
                         </div>
                       ))
                     )}
-                    {(inquiries.data ?? []).length > 4 && (
-                      <button onClick={() => setTab("inquiries")} className="w-full p-3 text-sm text-primary hover:bg-muted/30 transition-colors flex items-center justify-center gap-1">
+                    {(conversations.data ?? []).length > 4 && (
+                      <button onClick={() => setTab("messages")} className="w-full p-3 text-sm text-primary hover:bg-muted/30 transition-colors flex items-center justify-center gap-1">
                         View all <ArrowRight className="h-3.5 w-3.5" />
                       </button>
                     )}
@@ -344,27 +273,30 @@ function DashboardPage() {
             )}
           </TabsContent>
 
-          {/* ── INQUIRIES TAB ── */}
-          <TabsContent value="inquiries" className="mt-0">
+          {/* ── MESSAGES TAB ── */}
+          <TabsContent value="messages" className="mt-0">
             <div className="mb-6 flex items-center justify-between">
-              <h2 className="text-xl font-bold">My Inquiries & Conversations</h2>
-              <Badge variant="secondary">{inquiries.data?.length ?? 0} total</Badge>
+              <h2 className="text-xl font-bold">My Messages</h2>
+              <Button className="gap-2" onClick={() => navigate({ to: "/messages" })}>
+                <MessageSquare className="h-4 w-4" />
+                Open Messages
+              </Button>
             </div>
-            {inquiries.isLoading ? (
+            {conversations.isLoading ? (
               <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-            ) : (inquiries.data ?? []).length === 0 ? (
+            ) : (conversations.data ?? []).length === 0 ? (
               <EmptyState
                 icon={<Inbox className="h-6 w-6 text-muted-foreground" />}
-                title="No inquiries yet"
-                description="Reach out to agents from any property page."
+                title="No messages yet"
+                description="Reach out to agents from any property page and chats will appear here."
               />
             ) : (
               <div className="space-y-4">
-                {(inquiries.data ?? []).map((inq) => (
-                  <InquiryCard 
-                    key={inq.id} 
-                    inquiry={inq} 
-                    onOpenConversation={() => handleOpenConversation(inq)}
+                {(conversations.data ?? []).map((conversation) => (
+                  <ConversationCard
+                    key={conversation.id}
+                    conversation={conversation}
+                    onOpen={() => navigate({ to: "/messages", search: { conversation: conversation.id } })}
                   />
                 ))}
               </div>
@@ -378,97 +310,14 @@ function DashboardPage() {
         </Tabs>
       </div>
 
-      {/* Conversation Dialog */}
-      <Dialog open={replyDialogOpen} onOpenChange={setReplyDialogOpen}>
-        <DialogContent className="sm:max-w-[550px] max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              Conversation with Agent
-            </DialogTitle>
-            <DialogDescription>
-              {selectedInquiry?.property?.title && (
-                <span>About: {selectedInquiry.property.title}</span>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <ScrollArea className="flex-1 pr-4">
-            {loadingReplies ? (
-              <div className="flex justify-center py-10">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : conversationReplies.length === 0 ? (
-              <div className="text-center py-10 text-muted-foreground">
-                <MessageSquare className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                <p className="text-sm">No messages yet</p>
-              </div>
-            ) : (
-              <div className="space-y-4 py-4">
-                {conversationReplies.map((msg, idx) => {
-                  const isUser = msg.user_id === user?.id;
-                  const senderName = isUser ? "You" : (msg.agent?.full_name || "Agent");
-                  
-                  return (
-                    <div key={msg.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[80%] ${isUser ? "order-2" : "order-1"}`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-medium text-muted-foreground">
-                            {senderName}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {formatDate(msg.created_at)}
-                          </span>
-                        </div>
-                        <div className={`rounded-2xl px-4 py-2 ${
-                          isUser 
-                            ? "bg-primary text-primary-foreground" 
-                            : "bg-muted"
-                        }`}>
-                          <p className="text-sm break-words">{msg.message}</p>
-                        </div>
-                        {idx === 0 && !isUser && msg.status === "replied" && (
-                          <p className="text-xs text-green-600 mt-1">✓ Agent has responded</p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </ScrollArea>
-          
-          <div className="border-t pt-4 mt-4">
-            <div className="space-y-2">
-              <Label>Your Reply</Label>
-              <Textarea
-                placeholder="Type your message here..."
-                rows={3}
-                value={replyMessage}
-                onChange={(e) => setReplyMessage(e.target.value)}
-              />
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setReplyDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSendReply} disabled={!replyMessage.trim() || sendReply.isPending} className="gap-2">
-                  {sendReply.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  Send Reply
-                </Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
 
-// Inquiry Card Component
-function InquiryCard({ inquiry, onOpenConversation }: { inquiry: any; onOpenConversation: () => void }) {
-  const property = inquiry.property as { id?: string; title?: string; city?: string; images?: string[] } | null;
-  const isReplied = inquiry.status === "replied" || inquiry.has_agent_reply;
-  
+function ConversationCard({ conversation, onOpen }: { conversation: Conversation; onOpen: () => void }) {
+  const property = conversation.property;
+  const otherUser = conversation.other_user;
+
   return (
     <div className="rounded-2xl border bg-card overflow-hidden hover:shadow-md transition-all">
       <div className="p-4">
@@ -479,39 +328,30 @@ function InquiryCard({ inquiry, onOpenConversation }: { inquiry: any; onOpenConv
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between flex-wrap gap-2">
               <div>
-                <Link 
-                  to="/property/$id" 
-                  params={{ id: property?.id || "" }}
-                  className="font-semibold hover:underline"
-                >
-                  {property?.title || "Unknown Property"}
-                </Link>
-                {property?.city && (
-                  <span className="text-xs text-muted-foreground ml-2">{property.city}</span>
-                )}
+                <p className="font-semibold">{otherUser?.full_name || otherUser?.email || "Chat room"}</p>
+                {property?.title && <p className="text-xs text-muted-foreground">{property.title}</p>}
               </div>
-              <InquiryBadge status={isReplied ? "replied" : inquiry.status} />
+              <div className="flex items-center gap-2">
+                {conversation.unread_count > 0 && <Badge>{conversation.unread_count} unread</Badge>}
+                <Badge variant="secondary">{conversation.conversation_type === "property" ? "Property" : "Direct"}</Badge>
+              </div>
             </div>
             
             <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-              {inquiry.message}
+              {conversation.last_message || "No messages yet"}
             </p>
             
             <div className="flex items-center justify-between mt-3">
               <div className="text-xs text-muted-foreground">
-                Sent {formatDate(inquiry.created_at)}
+                {conversation.property_id ? "About a property" : "Agent chat"}
               </div>
               <Button 
                 size="sm" 
-                variant={isReplied ? "outline" : "default"}
+                variant="outline"
                 className="gap-2"
-                onClick={onOpenConversation}
+                onClick={onOpen}
               >
-                {isReplied ? (
-                  <><MessageSquare className="h-3.5 w-3.5" /> View Conversation</>
-                ) : (
-                  <><ReplyAll className="h-3.5 w-3.5" /> Reply to Agent</>
-                )}
+                <MessageSquare className="h-3.5 w-3.5" /> Open Chat
               </Button>
             </div>
           </div>
@@ -670,7 +510,7 @@ function ProfileForm({
               <h3 className="font-semibold text-sm">Want to list properties?</h3>
             </div>
             <p className="text-xs text-muted-foreground mb-3">
-              Apply to become an agent to list properties, manage inquiries, and grow your business.
+              Apply to become an agent to list properties, manage chats, and grow your business.
             </p>
             <Link to="/agent">
               <Button size="sm" variant="outline" className="w-full gap-2">
@@ -704,19 +544,6 @@ function StatCard({
       <div className="text-sm font-medium">{label}</div>
       <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>
     </button>
-  );
-}
-
-function InquiryBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    unread: "bg-yellow-500/15 text-yellow-700",
-    read: "bg-muted text-muted-foreground",
-    replied: "bg-green-500/15 text-green-700",
-  };
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${map[status] ?? "bg-muted"}`}>
-      {status === "replied" ? "Has Reply" : status}
-    </span>
   );
 }
 

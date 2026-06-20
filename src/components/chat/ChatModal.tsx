@@ -11,11 +11,12 @@ interface ChatModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   conversationId: string | null;
+  receiverId: string | null;
   otherUserName: string;
   currentUserId: string;
 }
 
-export function ChatModal({ open, onOpenChange, conversationId, otherUserName, currentUserId }: ChatModalProps) {
+export function ChatModal({ open, onOpenChange, conversationId, receiverId, otherUserName, currentUserId }: ChatModalProps) {
   const [newMessage, setNewMessage] = useState("");
   const { messages, isLoading, sendMessage, isSending, markAsRead } = useMessages(conversationId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -33,21 +34,12 @@ export function ChatModal({ open, onOpenChange, conversationId, otherUserName, c
     if (open && conversationId) {
       markAsRead();
     }
-  }, [open, conversationId]);
+  }, [open, conversationId, markAsRead]);
 
   const handleSend = () => {
-    if (!newMessage.trim() || !conversationId) return;
-    
-    // Find receiver ID (the other person)
-    const lastMessage = messages[messages.length - 1];
-    const receiverId = lastMessage?.sender_id === currentUserId 
-      ? lastMessage?.receiver_id 
-      : lastMessage?.sender_id;
-    
-    if (receiverId) {
-      sendMessage({ conversationId, message: newMessage, receiverId });
-      setNewMessage("");
-    }
+    if (!newMessage.trim() || !conversationId || !receiverId) return;
+    sendMessage({ conversationId, message: newMessage, receiverId });
+    setNewMessage("");
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -127,7 +119,7 @@ export function ChatModal({ open, onOpenChange, conversationId, otherUserName, c
             disabled={isSending}
             className="flex-1"
           />
-          <Button onClick={handleSend} disabled={!newMessage.trim() || isSending} size="icon">
+          <Button onClick={handleSend} disabled={!newMessage.trim() || !receiverId || isSending} size="icon">
             {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
