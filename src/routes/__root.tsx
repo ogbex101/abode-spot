@@ -1,4 +1,10 @@
-import { createRootRouteWithContext, Outlet, Link, useRouter } from "@tanstack/react-router";
+import {
+  createRootRouteWithContext,
+  Outlet,
+  Link,
+  useRouter,
+  useRouterState,
+} from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -21,7 +27,7 @@ function NotFoundComponent() {
         </p>
         <Link
           to="/"
-          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           Go home
         </Link>
@@ -42,12 +48,15 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
-            onClick={() => { router.invalidate(); reset(); }}
+            onClick={() => {
+              router.invalidate();
+              reset();
+            }}
             className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             Try again
           </button>
-          <Link to="/" className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors">
+          <Link to="/" className="rounded-xl border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted">
             Go home
           </Link>
         </div>
@@ -63,6 +72,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootComponent() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const showFooter = pathname === "/";
+
   return (
     <AuthProvider>
       <div className="flex min-h-screen flex-col">
@@ -70,7 +82,7 @@ function RootComponent() {
         <main className="flex-1">
           <Outlet />
         </main>
-        <Footer />
+        {showFooter && <Footer />}
       </div>
       <Toaster richColors position="top-right" />
     </AuthProvider>
