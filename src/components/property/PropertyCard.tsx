@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Bed, Bath, Square, Heart, MapPin, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { PropertyCarousel } from "./PropertyCarousel";
 import type { Property } from "@/lib/types";
 import { formatPrice, truncate } from "@/lib/format";

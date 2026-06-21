@@ -1,7 +1,7 @@
 // ============================================
 // Auth Provider with Agent Approval Flow
 // ============================================
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import type { AppRole, AppUser } from "@/lib/types";
@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const router = useRouter();
 
-  const clearAuthState = () => {
+  const clearAuthState = useCallback(() => {
     setSession(null);
     setUser(null);
     setProfile(null);
@@ -47,9 +47,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void queryClient.cancelQueries();
     queryClient.clear();
     void router.invalidate();
-  };
+  }, [queryClient, router]);
 
-  const loadProfileAndRole = async (authUser: User) => {
+  const loadProfileAndRole = useCallback(async (authUser: User) => {
     if (!supabase) return;
     
     try {
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Error loading profile:", error);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!supabase) {
@@ -141,7 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     
     return () => subscription.unsubscribe();
-  }, []);
+  }, [clearAuthState, loadProfileAndRole, queryClient, router]);
 
   const signIn = async (email: string, password: string) => {
     if (!supabase) return { error: getErrorMessage("Supabase not configured") };

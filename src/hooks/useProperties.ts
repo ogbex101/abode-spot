@@ -79,7 +79,8 @@ export function useProperties(filters: PropertyFilters = {}) {
       if (!isSupabaseConfigured || !supabase) {
         const effectiveStatus = normalizedFilters.status ?? "approved";
         // In mock mode, ignore agentId so agents see all mock data
-        const { agentId: _ignored, ...filtersWithoutAgent } = normalizedFilters;
+        const filtersWithoutAgent = { ...normalizedFilters };
+        delete filtersWithoutAgent.agentId;
         return applyFilters(MOCK_PROPERTIES, { ...filtersWithoutAgent, status: effectiveStatus });
       }
       let q = supabase

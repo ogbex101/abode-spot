@@ -234,7 +234,11 @@ function Home() {
             </div>
             <Link to="/properties" className="hidden items-center gap-1.5 text-sm font-medium text-primary hover:gap-3 transition-all md:flex">View all <ArrowRight className="h-4 w-4" /></Link>
           </div>
-          <PropertyGrid properties={featured.data ?? []} loading={featured.isLoading && !featured.data} />
+          <PropertyGrid
+            properties={featured.data ?? []}
+            loading={featured.isLoading && !featured.data}
+            priorityCount={0}
+          />
           <div className="mt-8 text-center md:hidden">
             <Link to="/properties"><Button variant="outline" className="gap-2">View all properties <ArrowRight className="h-4 w-4" /></Button></Link>
           </div>

@@ -275,8 +275,12 @@ function applyLiveMetrics(sections: Record<string, unknown>, metrics: HomepageMe
   const result: Record<string, unknown> = { ...sections };
 
   if (result.hero) {
-    const { categoryCounts: _categories, cityCounts: _cities, ...stats } = metrics;
-    result.hero = { ...(result.hero as object), ...stats };
+    result.hero = {
+      ...(result.hero as object),
+      stat_properties: metrics.stat_properties,
+      stat_clients: metrics.stat_clients,
+      stat_agents: metrics.stat_agents,
+    };
   }
 
   if (result.browse_categories) {
