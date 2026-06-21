@@ -7,6 +7,7 @@ import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import type { AppRole, AppUser } from "@/lib/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
+import { getErrorMessage, toAppError } from "@/lib/errors";
 
 interface AuthContextValue {
   user: User | null;
@@ -38,27 +39,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const router = useRouter();
 
-  const loadProfileAndRole = async (uid: string) => {
+  const loadProfileAndRole = async (authUser: User) => {
     if (!supabase) return;
     
     try {
       const { data: prof, error: profError } = await supabase
         .from("users")
         .select("*")
-        .eq("id", uid)
+        .eq("id", authUser.id)
         .maybeSingle();
       
       if (profError) throw profError;
-      setProfile((prof as AppUser) ?? null);
+
+      let profileRow = prof as AppUser | null;
+      if (!profileRow) {
+        const { data: repairedProfile, error: repairError } = await supabase
+          .from("users")
+          .upsert({
+            id: authUser.id,
+            email: authUser.email ?? "",
+            full_name: (authUser.user_metadata?.full_name as string | undefined) ?? "",
+            role: "user",
+            is_verified: Boolean(authUser.email_confirmed_at),
+            agent_status: "not_applied",
+          }, { onConflict: "id" })
+          .select("*")
+          .single();
+
+        if (repairError) throw repairError;
+        profileRow = repairedProfile as AppUser;
+      }
+
+      setProfile(profileRow);
       
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
         .select("role")
-        .eq("user_id", uid);
+        .eq("user_id", authUser.id);
       
       if (rolesError) throw rolesError;
       
-      const roleList = (roles ?? []).map((r: { role: string }) => r.role);
+      let roleList = (roles ?? []).map((r: { role: string }) => r.role);
+      if (roleList.length === 0) {
+        const { error: basicRoleError } = await supabase.from("user_roles").upsert({
+          user_id: authUser.id,
+          role: "user",
+        }, { onConflict: "user_id,role", ignoreDuplicates: true });
+        if (basicRoleError) throw basicRoleError;
+        roleList = ["user"];
+      }
       
       let resolvedRole: AppRole = "user";
       if (roleList.includes("admin")) resolvedRole = "admin";
@@ -68,8 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       setRole(resolvedRole);
       
-      if (prof && (prof as AppUser).role !== resolvedRole) {
-        supabase.from("users").update({ role: resolvedRole }).eq("id", uid);
+      if (profileRow && profileRow.role !== resolvedRole) {
+        supabase.from("users").update({ role: resolvedRole }).eq("id", authUser.id);
       }
     } catch (error) {
       console.error("Error loading profile:", error);
@@ -86,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
-        await loadProfileAndRole(s.user.id);
+        await loadProfileAndRole(s.user);
       } else {
         setProfile(null);
         setRole("user");
@@ -98,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(async ({ data: { session: s } }) => {
       setSession(s);
       setUser(s?.user ?? null);
-      if (s?.user) await loadProfileAndRole(s.user.id);
+      if (s?.user) await loadProfileAndRole(s.user);
       setLoading(false);
     });
     
@@ -106,13 +135,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    if (!supabase) return { error: "Supabase not configured" };
+    if (!supabase) return { error: getErrorMessage("Supabase not configured") };
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    return { error: error ? getErrorMessage(error, "Could not sign in. Please try again.") : null };
   };
 
   const signUp = async (email: string, password: string, fullName: string, desiredRole: "user" | "agent" = "user") => {
-    if (!supabase) return { error: "Supabase not configured", needsVerification: false };
+    if (!supabase) return { error: getErrorMessage("Supabase not configured"), needsVerification: false };
 
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -121,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         options: { data: { full_name: fullName } },
       });
       
-      if (error) return { error: error.message, needsVerification: false };
+      if (error) return { error: getErrorMessage(error, "Could not create your account. Please try again."), needsVerification: false };
       if (!data.user) return { error: "Signup failed", needsVerification: false };
 
       await new Promise((r) => setTimeout(r, 1000));
@@ -146,12 +175,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: null, needsVerification: false };
     } catch (err) {
       console.error("Signup error:", err);
-      return { error: "An unexpected error occurred", needsVerification: false };
+      return { error: getErrorMessage(err, "Could not create your account. Please try again."), needsVerification: false };
     }
   };
 
   const applyForAgent = async (applicationData: any) => {
-    if (!supabase || !user) return { error: "Not logged in" };
+    if (!supabase || !user) return { error: getErrorMessage("Not logged in") };
     
     try {
       const { error: roleError } = await supabase.from("user_roles").upsert({
@@ -177,10 +206,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status: "pending",
       });
       
-      if (error) throw error;
+      if (error) throw toAppError(error, "Could not submit your application. Please try again.");
       return { error: null };
     } catch (err) {
-      return { error: (err as Error).message };
+      return { error: getErrorMessage(err, "Could not submit your application. Please try again.") };
     }
   };
 
@@ -190,7 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshProfile = async () => {
-    if (user) await loadProfileAndRole(user.id);
+    if (user) await loadProfileAndRole(user);
   };
 
   const isVerified = useMemo(() => Boolean(user), [user]);

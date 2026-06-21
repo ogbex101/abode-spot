@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { AppUser, AppRole } from "@/lib/types";
 import { MOCK_AGENT } from "@/lib/mock-data";
+import { getErrorMessage, toAppError } from "@/lib/errors";
 
 export const Route = createFileRoute("/_authenticated/_admin/admin/users")({
   component: AdminUsers,
@@ -40,7 +41,7 @@ function AdminUsers() {
         .select("*")
         .order("created_at", { ascending: false });
       
-      if (usersError) throw new Error(usersError.message);
+      if (usersError) throw toAppError(usersError, "Could not load users. Please try again.");
       if (!users) return [];
 
       // Then fetch all user roles separately
@@ -81,7 +82,7 @@ function AdminUsers() {
 
       // Update display column in users table
       const { error: userErr } = await supabase.from("users").update({ role }).eq("id", id);
-      if (userErr) throw new Error(userErr.message);
+      if (userErr) throw toAppError(userErr, "Could not update this user. Please try again.");
 
       // Always ensure base 'user' role exists
       await supabase
@@ -92,7 +93,7 @@ function AdminUsers() {
       const { error: roleErr } = await supabase
         .from("user_roles")
         .upsert({ user_id: id, role }, { onConflict: "user_id,role" });
-      if (roleErr) throw new Error(roleErr.message);
+      if (roleErr) throw toAppError(roleErr, "Could not update this role. Please try again.");
 
       // Remove higher roles when downgrading
       if (role === "user") {
@@ -106,17 +107,17 @@ function AdminUsers() {
       }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin_users"] }); toast.success("Role updated"); },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(getErrorMessage(e, "Could not update this role. Please try again.")),
   });
 
   const toggleVerified = useMutation({
     mutationFn: async ({ id, is_verified }: { id: string; is_verified: boolean }) => {
       if (!supabase) throw new Error("Not connected");
       const { error } = await supabase.from("users").update({ is_verified }).eq("id", id);
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not update verification. Please try again.");
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin_users"] }); toast.success("Verification updated"); },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(getErrorMessage(e, "Could not update verification. Please try again.")),
   });
 
   const filtered = allUsers.filter((u) => {

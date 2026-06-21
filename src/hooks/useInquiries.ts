@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { MOCK_INQUIRIES, MOCK_PROPERTIES } from "@/lib/mock-data";
 import type { Inquiry, InquiryStatus } from "@/lib/types";
+import { toAppError } from "@/lib/errors";
 
 export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { scope: "user" }) {
   const { user, role } = useAuth();
@@ -53,7 +54,7 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
 
         if (inquiriesError) {
           console.error("❌ Inquiries error:", inquiriesError);
-          throw new Error(inquiriesError.message);
+          throw toAppError(inquiriesError, "Could not load inquiries. Please try again.");
         }
         
         if (!inquiries || inquiries.length === 0) {
@@ -117,7 +118,7 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
 
         if (error) {
           console.error("❌ User inquiries error:", error);
-          throw new Error(error.message);
+          throw toAppError(error, "Could not load inquiries. Please try again.");
         }
         
         // Count replies for each inquiry
@@ -162,7 +163,7 @@ export function useInquiries(opts: { scope: "user" | "admin" | "agent" } = { sco
         `)
         .order("created_at", { ascending: false });
 
-      if (inquiriesError) throw new Error(inquiriesError.message);
+      if (inquiriesError) throw toAppError(inquiriesError, "Could not load inquiries. Please try again.");
       
       if (!inquiries || inquiries.length === 0) return [];
       
@@ -230,7 +231,7 @@ export function useCreateInquiry() {
         })
         .select();
         
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not send your inquiry. Please try again.");
       return data;
     },
     onSuccess: () => {
@@ -256,7 +257,7 @@ export function useSendReply() {
       message: string;
     }) => {
       if (!user) throw new Error("You must be signed in to send a reply");
-      if (!isSupabaseConfigured || !supabase) throw new Error("Supabase not configured");
+      if (!isSupabaseConfigured || !supabase) throw toAppError("Supabase not configured");
       
       // Get the original inquiry to verify it exists
       const { data: parentInquiry, error: parentError } = await supabase
@@ -284,7 +285,7 @@ export function useSendReply() {
           is_reply: true
         });
       
-      if (insertError) throw new Error(insertError.message);
+      if (insertError) throw toAppError(insertError, "Could not send your reply. Please try again.");
       
       // Update parent inquiry status to indicate there's a reply
       await supabase
@@ -322,7 +323,7 @@ export function useUpdateInquiryStatus() {
         .from("inquiries")
         .update({ status })
         .eq("id", id);
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not update this inquiry. Please try again.");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["inquiries"] });
@@ -351,7 +352,7 @@ export function useGetConversation(inquiryId: string | null) {
         .or(`id.eq.${inquiryId},parent_inquiry_id.eq.${inquiryId}`)
         .order("created_at", { ascending: true });
       
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not load this conversation. Please try again.");
       
       // Mark unread messages as read if current user is the receiver
       const unreadMessages = data?.filter(
@@ -389,7 +390,7 @@ export function useDeleteInquiry() {
         .delete()
         .eq("parent_inquiry_id", inquiryId);
       
-      if (repliesError) throw new Error(repliesError.message);
+      if (repliesError) throw toAppError(repliesError, "Could not delete this inquiry. Please try again.");
       
       // Delete the main inquiry
       const { error } = await supabase
@@ -397,7 +398,7 @@ export function useDeleteInquiry() {
         .delete()
         .eq("id", inquiryId);
       
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not delete this inquiry. Please try again.");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["inquiries"] });
@@ -426,7 +427,7 @@ export function useUnreadCount() {
       }
       
       const { count, error } = await query;
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not load unread count. Please try again.");
       return count || 0;
     },
     enabled: !!user,

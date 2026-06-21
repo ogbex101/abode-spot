@@ -11,6 +11,7 @@ import { useCreateProperty } from "@/hooks/useProperties";
 import { ImageUpload } from "@/components/property/ImageUpload";
 import { PROPERTY_TYPES } from "@/lib/constants";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/errors";
 import type { PropertyType, ListingType, PropertyStatus } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/_admin/admin/add-property")({
@@ -49,7 +50,7 @@ function Field({ label, children, hint }: { label: string; children: React.React
   );
 }
 
-export default function AdminAddProperty() {
+function AdminAddProperty() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const create = useCreateProperty();
@@ -106,7 +107,7 @@ export default function AdminAddProperty() {
       toast.success("Property created successfully!");
       navigate({ to: "/admin/properties" });
     } catch (err) {
-      toast.error((err as Error).message);
+      toast.error(getErrorMessage(err, "Could not create this property. Please try again."));
     }
   };
 

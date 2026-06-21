@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { getErrorMessage } from "@/lib/errors";
 
 interface Props {
   value: string[];
@@ -52,7 +53,7 @@ export function ImageUpload({
               contentType: file.type,
             });
             if (error) {
-              toast.error(error.message);
+              toast.error(getErrorMessage(error, "Could not upload this image. Please try again."));
               continue;
             }
             const { data } = supabase.storage.from(bucket).getPublicUrl(path);

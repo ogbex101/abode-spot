@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { getErrorMessage, toAppError } from "@/lib/errors";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, AreaChart, Area,
@@ -55,7 +56,7 @@ function AdminDashboard() {
         .eq("status", "pending")
         .order("created_at", { ascending: false });
       
-      if (error) throw error;
+      if (error) throw toAppError(error, "Could not load agent applications. Please try again.");
       return data || [];
     },
     enabled: isSupabaseConfigured,
@@ -70,7 +71,7 @@ function AdminDashboard() {
       const { error: roleError } = await supabase
         .from("user_roles")
         .upsert({ user_id: userId, role: "agent" }, { onConflict: "user_id,role" });
-      if (roleError) throw roleError;
+      if (roleError) throw toAppError(roleError, "Could not approve this agent. Please try again.");
       
       // Remove pending_agent role
       await supabase
@@ -84,7 +85,7 @@ function AdminDashboard() {
         .from("users")
         .update({ role: "agent", agent_status: "approved" })
         .eq("id", userId);
-      if (userError) throw userError;
+      if (userError) throw toAppError(userError, "Could not approve this agent. Please try again.");
       
       // Update application
       const { data: updatedApplications, error: appError } = await supabase
@@ -97,7 +98,7 @@ function AdminDashboard() {
         .eq("user_id", userId)
         .eq("status", "pending")
         .select("id");
-      if (appError) throw appError;
+      if (appError) throw toAppError(appError, "Could not approve this application. Please try again.");
       if (!updatedApplications?.length) {
         throw new Error("No pending application was updated");
       }
@@ -110,7 +111,7 @@ function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["admin_users"] });
     },
     onError: (error: Error) => {
-      toast.error(`Failed to approve agent: ${error.message}`);
+      toast.error(getErrorMessage(error, "Could not approve this agent. Please try again."));
     },
   });
 
@@ -124,7 +125,7 @@ function AdminDashboard() {
         .from("users")
         .update({ agent_status: "rejected" })
         .eq("id", userId);
-      if (userError) throw userError;
+      if (userError) throw toAppError(userError, "Could not reject this agent. Please try again.");
       
       // Update application
       const { data: updatedApplications, error: appError } = await supabase
@@ -137,7 +138,7 @@ function AdminDashboard() {
         .eq("user_id", userId)
         .eq("status", "pending")
         .select("id");
-      if (appError) throw appError;
+      if (appError) throw toAppError(appError, "Could not reject this application. Please try again.");
       if (!updatedApplications?.length) {
         throw new Error("No pending application was updated");
       }
@@ -152,7 +153,7 @@ function AdminDashboard() {
       setSelectedApplication(null);
     },
     onError: (error: Error) => {
-      toast.error(`Failed to reject: ${error.message}`);
+      toast.error(getErrorMessage(error, "Could not reject this application. Please try again."));
     },
   });
 
@@ -235,10 +236,12 @@ function AdminDashboard() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-5">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="applications">Agent Applications ({pendingAgents})</TabsTrigger>
-          <TabsTrigger value="activity">Recent Activity</TabsTrigger>
+        <TabsList className="grid h-auto w-full grid-cols-1 gap-1 p-1 sm:grid-cols-3 lg:w-[520px]">
+          <TabsTrigger value="overview" className="min-h-10 px-3 text-xs leading-tight sm:text-sm">Overview</TabsTrigger>
+          <TabsTrigger value="applications" className="min-h-10 whitespace-normal px-3 text-center text-xs leading-tight sm:text-sm">
+            Agent Applications ({pendingAgents})
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="min-h-10 px-3 text-xs leading-tight sm:text-sm">Recent Activity</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}

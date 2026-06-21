@@ -20,6 +20,7 @@ import { PROPERTY_TYPES } from "@/lib/constants";
 import { ImageUpload } from "@/components/property/ImageUpload";
 import { formatPrice } from "@/lib/format";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/errors";
 import type { PropertyType, ListingType } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/agent")({
@@ -103,7 +104,7 @@ function AgentHome() {
       setImages([]);
       setActiveTab("listings");
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(getErrorMessage(e, "Could not submit this property. Please try again."));
     }
   };
 
@@ -138,17 +139,17 @@ function AgentHome() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
-          <TabsTrigger value="messages" className="gap-2">
+        <TabsList className="grid h-auto w-full grid-cols-1 gap-1 p-1 sm:grid-cols-3 lg:w-[680px]">
+          <TabsTrigger value="messages" className="min-h-10 gap-2 px-3 text-xs leading-tight sm:text-sm">
             <Inbox className="h-4 w-4" /> Messages
             {unreadMessages > 0 && (
               <Badge variant="destructive" className="ml-1 h-5 min-w-5 rounded-full px-1 text-xs">{unreadMessages}</Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="listings" className="gap-2">
+          <TabsTrigger value="listings" className="min-h-10 gap-2 whitespace-normal px-3 text-center text-xs leading-tight sm:text-sm">
             <Building2 className="h-4 w-4" /> My Listings ({props.length})
           </TabsTrigger>
-          <TabsTrigger value="add" className="gap-2">
+          <TabsTrigger value="add" className="min-h-10 gap-2 px-3 text-xs leading-tight sm:text-sm">
             <Plus className="h-4 w-4" /> Add Property
           </TabsTrigger>
         </TabsList>

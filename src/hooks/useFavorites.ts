@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import type { Property } from "@/lib/types";
 import { MOCK_PROPERTIES } from "@/lib/mock-data";
+import { toAppError } from "@/lib/errors";
 
 const LOCAL_KEY = "mock_saved_property_ids";
 
@@ -28,7 +29,7 @@ export function useSavedIds() {
         .from("saved_properties")
         .select("property_id")
         .eq("user_id", user.id);
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not load saved properties. Please try again.");
       return (data ?? []).map((r: { property_id: string }) => r.property_id);
     },
   });
@@ -49,7 +50,7 @@ export function useSavedProperties() {
         .from("properties")
         .select("*, agent:users!properties_agent_id_fkey(*)")
         .in("id", idList);
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not load saved properties. Please try again.");
       return (data as Property[]) ?? [];
     },
   });
@@ -72,12 +73,12 @@ export function useToggleSave() {
           .delete()
           .eq("user_id", user.id)
           .eq("property_id", propertyId);
-        if (error) throw new Error(error.message);
+        if (error) throw toAppError(error, "Could not remove this saved property. Please try again.");
       } else {
         const { error } = await supabase
           .from("saved_properties")
           .insert({ user_id: user.id, property_id: propertyId });
-        if (error) throw new Error(error.message);
+        if (error) throw toAppError(error, "Could not save this property. Please try again.");
       }
     },
     onSuccess: () => {

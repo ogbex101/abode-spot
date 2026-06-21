@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useAllHomepageContent, useUpsertHomepageSection, DEFAULT_HOMEPAGE_CONTENT } from "@/hooks/useHomepageContent";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/errors";
 
 export const Route = createFileRoute("/_authenticated/_admin/admin/homepage")({
   component: AdminHomepage,
@@ -109,7 +110,7 @@ function HeroEditor({ initial }: { initial: Record<string, unknown> }) {
       await upsert.mutateAsync({ sectionKey: "hero", data: form });
       toast.success("Hero section saved!");
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(getErrorMessage(e, "Could not save homepage content. Please try again."));
     }
   };
 
@@ -179,7 +180,7 @@ function CategoriesEditor({ initial }: { initial: Record<string, unknown> }) {
     try {
       await upsert.mutateAsync({ sectionKey: "browse_categories", data: { heading, subtext, categories } });
       toast.success("Categories section saved!");
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) { toast.error(getErrorMessage(e, "Could not save homepage content. Please try again.")); }
   };
 
   return (
@@ -258,7 +259,7 @@ function HowItWorksEditor({ initial }: { initial: Record<string, unknown> }) {
     try {
       await upsert.mutateAsync({ sectionKey: "how_it_works", data: { heading, subtext, steps } });
       toast.success("How it works section saved!");
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) { toast.error(getErrorMessage(e, "Could not save homepage content. Please try again.")); }
   };
 
   return (
@@ -300,7 +301,7 @@ function WhyUsEditor({ initial }: { initial: Record<string, unknown> }) {
     try {
       await upsert.mutateAsync({ sectionKey: "why_us", data: { heading, features } });
       toast.success("Why Us section saved!");
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) { toast.error(getErrorMessage(e, "Could not save homepage content. Please try again.")); }
   };
 
   return (
@@ -338,7 +339,7 @@ function TestimonialsEditor({ initial }: { initial: Record<string, unknown> }) {
     try {
       await upsert.mutateAsync({ sectionKey: "testimonials", data: { heading, items } });
       toast.success("Testimonials section saved!");
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) { toast.error(getErrorMessage(e, "Could not save homepage content. Please try again.")); }
   };
 
   return (
@@ -386,7 +387,7 @@ function CitiesEditor({ initial }: { initial: Record<string, unknown> }) {
     try {
       await upsert.mutateAsync({ sectionKey: "cities", data: { heading, locations } });
       toast.success("Cities section saved!");
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) { toast.error(getErrorMessage(e, "Could not save homepage content. Please try again.")); }
   };
 
   return (
@@ -422,7 +423,7 @@ function AgentCtaEditor({ initial }: { initial: Record<string, unknown> }) {
     try {
       await upsert.mutateAsync({ sectionKey: "agent_cta", data: form });
       toast.success("CTA section saved!");
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) { toast.error(getErrorMessage(e, "Could not save homepage content. Please try again.")); }
   };
 
   return (

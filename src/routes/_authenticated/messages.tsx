@@ -19,6 +19,7 @@ import {
   useMessages,
 } from "@/hooks/useMessages";
 import { cn } from "@/lib/utils";
+import { getErrorMessage } from "@/lib/errors";
 import { toast } from "sonner";
 
 interface Search {
@@ -201,7 +202,7 @@ function MessageThread({
       });
       setMessage("");
     } catch (error) {
-      toast.error((error as Error).message);
+      toast.error(getErrorMessage(error, "Could not send this message. Please try again."));
     }
   };
 
@@ -315,7 +316,7 @@ function NewAgentChatDialog({ open, onOpenChange }: { open: boolean; onOpenChang
       onOpenChange(false);
       navigate({ to: "/messages", search: { conversation: conversationId } });
     } catch (error) {
-      toast.error((error as Error).message);
+      toast.error(getErrorMessage(error, "Could not start this chat. Please try again."));
     }
   };
 

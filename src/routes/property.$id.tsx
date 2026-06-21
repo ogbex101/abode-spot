@@ -15,6 +15,7 @@ import { PROPERTY_FEATURES } from "@/lib/constants";
 import { PropertyGrid } from "@/components/property/PropertyGrid";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { getErrorMessage } from "@/lib/errors";
 
 export const Route = createFileRoute("/property/$id")({
   component: PropertyDetail,
@@ -251,7 +252,7 @@ function AgentSidebar({ propertyId, agent }: { propertyId: string; agent?: impor
                 setMessage("");
                 navigate({ to: "/messages", search: { conversation: conversationId } });
               },
-              onError: (e: Error) => toast.error(e.message),
+              onError: (e: Error) => toast.error(getErrorMessage(e, "Could not send this message. Please try again.")),
             }
           );
         }}

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { MOCK_PROPERTIES } from "@/lib/mock-data";
 import type { Property, PropertyStatus, PropertyType, ListingType } from "@/lib/types";
+import { toAppError } from "@/lib/errors";
 
 export interface PropertyFilters {
   search?: string;
@@ -72,7 +73,7 @@ export function useProperties(filters: PropertyFilters = {}) {
         );
       }
       const { data, error } = await q;
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not load properties. Please try again.");
       return (data as Property[]) ?? [];
     },
   });
@@ -95,7 +96,7 @@ export function useProperty(id: string | undefined) {
         .select("*, agent:users!properties_agent_id_fkey(*)")
         .eq("id", id!)
         .maybeSingle();
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not load this property. Please try again.");
       return data as Property | null;
     },
   });
@@ -132,7 +133,7 @@ export function useCreateProperty() {
         return newProp;
       }
       const { data, error } = await supabase.from("properties").insert(payload).select().single();
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not create this property. Please check the details and try again.");
       return data as Property;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
@@ -149,7 +150,7 @@ export function useUpdateProperty() {
         return;
       }
       const { error } = await supabase.from("properties").update(patch).eq("id", id);
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not update this property. Please try again.");
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["properties"] });
@@ -168,7 +169,7 @@ export function useUpdatePropertyStatus() {
         return;
       }
       const { error } = await supabase.from("properties").update({ status }).eq("id", id);
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not update this property status. Please try again.");
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
   });
@@ -184,7 +185,7 @@ export function useToggleFeatured() {
         return;
       }
       const { error } = await supabase.from("properties").update({ featured }).eq("id", id);
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not update the featured status. Please try again.");
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
   });
@@ -200,7 +201,7 @@ export function useDeleteProperty() {
         return;
       }
       const { error } = await supabase.from("properties").delete().eq("id", id);
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not delete this property. Please try again.");
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
   });
@@ -218,7 +219,7 @@ export function useBulkUpdatePropertyStatus() {
         return;
       }
       const { error } = await supabase.from("properties").update({ status }).in("id", ids);
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not update the selected properties. Please try again.");
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
   });
@@ -236,7 +237,7 @@ export function useBulkDeleteProperties() {
         return;
       }
       const { error } = await supabase.from("properties").delete().in("id", ids);
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not delete the selected properties. Please try again.");
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
   });

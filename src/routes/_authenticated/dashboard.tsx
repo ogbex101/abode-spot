@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Heart, Inbox, User as UserIcon, Settings, Home, ArrowRight,
-  TrendingUp, Building2, ChevronRight, Plus, Phone, Mail,
-  Star, Loader2, Save, CheckCircle2, Clock, MessageSquare
+  TrendingUp, Building2, ChevronRight, Phone, Mail,
+  Loader2, Save, CheckCircle2, Clock, MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import { PropertyGrid } from "@/components/property/PropertyGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getErrorMessage, toAppError } from "@/lib/errors";
 
 interface Search { tab?: string }
 
@@ -98,11 +99,6 @@ function DashboardPage() {
               </div>
             </div>
             <div className="hidden sm:flex items-center gap-2">
-              {!isPendingAgent && (
-                <Button variant="secondary" size="sm" className="gap-2" onClick={() => navigate({ to: "/agent" })}>
-                  <Plus className="h-3.5 w-3.5" /> List Property
-                </Button>
-              )}
               <Link to="/properties">
                 <Button variant="outline" size="sm" className="bg-white/10 border-white/20 text-white hover:bg-white/20 gap-2">
                   <Building2 className="h-3.5 w-3.5" /> Browse
@@ -411,14 +407,14 @@ function ProfileForm({
         .update(updateData)
         .eq("id", user.id);
 
-      if (error) throw error;
+      if (error) throw toAppError(error, "Could not save your profile. Please try again.");
 
       toast.success("Profile saved successfully!");
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
       await onSaved();
     } catch (err) {
-      toast.error((err as Error).message);
+      toast.error(getErrorMessage(err, "Could not save your profile. Please try again."));
     }
     setLoading(false);
   };
@@ -503,23 +499,6 @@ function ProfileForm({
           </div>
         </div>
 
-        {!isPendingAgent && role !== "agent" && (
-          <div className="rounded-2xl border bg-primary/5 border-primary/20 p-5">
-            <div className="flex items-center gap-2 mb-2">
-              <Star className="h-4 w-4 text-accent" />
-              <h3 className="font-semibold text-sm">Want to list properties?</h3>
-            </div>
-            <p className="text-xs text-muted-foreground mb-3">
-              Apply to become an agent to list properties, manage chats, and grow your business.
-            </p>
-            <Link to="/agent">
-              <Button size="sm" variant="outline" className="w-full gap-2">
-                <Plus className="h-3.5 w-3.5" />
-                Apply to become an Agent
-              </Button>
-            </Link>
-          </div>
-        )}
       </div>
     </div>
   );

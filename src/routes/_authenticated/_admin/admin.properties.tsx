@@ -17,6 +17,7 @@ import {
 import { Link } from "@tanstack/react-router";
 import { formatPrice, formatDate } from "@/lib/format";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/errors";
 import type { PropertyStatus } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/_admin/admin/properties")({
@@ -65,7 +66,9 @@ function AdminProperties() {
   };
 
   const act = (fn: () => Promise<unknown> | unknown, ok: string) =>
-    Promise.resolve(fn()).then(() => toast.success(ok)).catch((e: Error) => toast.error(e.message));
+    Promise.resolve(fn()).then(() => toast.success(ok)).catch((e: Error) => {
+      toast.error(getErrorMessage(e, "Could not update properties. Please try again."));
+    });
 
   const ids = Array.from(selected);
   const runBulk = async (s: PropertyStatus) => {

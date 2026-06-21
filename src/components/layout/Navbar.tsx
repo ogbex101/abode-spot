@@ -102,7 +102,7 @@ export function Navbar() {
 
         {/* Desktop Actions */}
         <div className="hidden items-center gap-2 md:flex">
-          {user && (
+          {(role === "agent" || role === "admin") && (
             <Button
               variant="ghost"
               size="sm"
@@ -257,7 +257,7 @@ export function Navbar() {
               </div>
             ) : (
               <div className="space-y-2">
-                {user && (
+                {(role === "agent" || role === "admin") && (
                   <Button
                     className="w-full gap-2"
                     variant="outline"

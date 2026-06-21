@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
+import { toAppError } from "@/lib/errors";
 
 export type ConversationType = "property" | "direct";
 
@@ -89,7 +90,7 @@ async function fetchConversation(conversationId: string, currentUserId: string) 
     .eq("id", conversationId)
     .maybeSingle();
 
-  if (error) throw new Error(error.message);
+  if (error) throw toAppError(error, "Could not load this chat. Please try again.");
   return data ? withOtherUser(data, currentUserId) : null;
 }
 
@@ -112,7 +113,7 @@ export function useConversations() {
         .or(`participant_a_id.eq.${user.id},participant_b_id.eq.${user.id}`)
         .order("last_message_at", { ascending: false });
 
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not load chats. Please try again.");
       const unreadCounts = new Map<string, number>();
       const { data: unreadRows, error: unreadError } = await supabase
         .from("messages")
@@ -120,7 +121,7 @@ export function useConversations() {
         .eq("receiver_id", user.id)
         .eq("is_read", false);
 
-      if (unreadError) throw new Error(unreadError.message);
+      if (unreadError) throw toAppError(unreadError, "Could not load unread messages. Please try again.");
 
       (unreadRows ?? []).forEach((row) => {
         unreadCounts.set(row.conversation_id, (unreadCounts.get(row.conversation_id) ?? 0) + 1);
@@ -165,7 +166,7 @@ export function useAgentDirectory() {
         .neq("id", user.id)
         .order("full_name", { ascending: true });
 
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not load agents. Please try again.");
       return (data ?? []) as ConversationParticipant[];
     },
     enabled: !!user && role === "agent",
@@ -189,7 +190,7 @@ export function useMessages(conversationId: string | null) {
         .eq("receiver_id", user.id)
         .eq("is_read", false);
 
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not mark messages as read. Please try again.");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
@@ -247,7 +248,7 @@ export function useMessages(conversationId: string | null) {
         .eq("conversation_id", conversationId)
         .order("created_at", { ascending: true });
 
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not load messages. Please try again.");
       return data as Message[];
     },
     enabled: !!conversationId,
@@ -278,7 +279,7 @@ export function useMessages(conversationId: string | null) {
         is_read: false,
       });
 
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not send this message. Please try again.");
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["messages", variables.conversationId] });
@@ -316,6 +317,14 @@ export function useCreateConversation() {
       const type: ConversationType = conversationType ?? (propertyId ? "property" : "direct");
       const [participantAId, participantBId] = orderedParticipants(user.id, otherUserId);
 
+      await ensureConversationParticipants({
+        currentUserId: user.id,
+        currentUserEmail: user.email ?? "",
+        currentUserFullName: (user.user_metadata?.full_name as string | undefined) ?? "",
+        currentUserIsVerified: Boolean(user.email_confirmed_at),
+        otherUserId,
+      });
+
       let existingQuery = supabase
         .from("conversations")
         .select("id")
@@ -328,7 +337,7 @@ export function useCreateConversation() {
         : existingQuery.is("property_id", null);
 
       const { data: existing, error: existingError } = await existingQuery.maybeSingle();
-      if (existingError) throw new Error(existingError.message);
+      if (existingError) throw toAppError(existingError, "Could not open this chat. Please try again.");
 
       const conversationId = existing?.id ?? await createConversationRow({
         currentUserId: user.id,
@@ -348,7 +357,7 @@ export function useCreateConversation() {
           message: trimmedMessage,
           is_read: false,
         });
-        if (messageError) throw new Error(messageError.message);
+        if (messageError) throw toAppError(messageError, "Could not send this message. Please try again.");
       }
 
       return conversationId;
@@ -357,6 +366,51 @@ export function useCreateConversation() {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     },
   });
+}
+
+async function ensureConversationParticipants({
+  currentUserId,
+  currentUserEmail,
+  currentUserFullName,
+  currentUserIsVerified,
+  otherUserId,
+}: {
+  currentUserId: string;
+  currentUserEmail: string;
+  currentUserFullName: string;
+  currentUserIsVerified: boolean;
+  otherUserId: string;
+}) {
+  if (!supabase) throw new Error("Supabase not configured");
+
+  const ids = [currentUserId, otherUserId];
+  const { data: existingUsers, error } = await supabase
+    .from("users")
+    .select("id")
+    .in("id", ids);
+
+  if (error) throw toAppError(error, "Could not prepare this chat. Please try again.");
+
+  const existingIds = new Set((existingUsers ?? []).map((row) => row.id));
+  if (!existingIds.has(currentUserId)) {
+    const { error: repairError } = await supabase
+      .from("users")
+      .upsert({
+        id: currentUserId,
+        email: currentUserEmail,
+        full_name: currentUserFullName,
+        role: "user",
+        is_verified: currentUserIsVerified,
+        agent_status: "not_applied",
+      }, { onConflict: "id" });
+
+    if (repairError) throw toAppError(repairError, "Could not prepare your account for messaging. Please refresh and try again.");
+    existingIds.add(currentUserId);
+  }
+
+  if (!existingIds.has(otherUserId)) {
+    throw new Error("The person you are trying to message does not have a valid profile yet");
+  }
 }
 
 async function createConversationRow({
@@ -393,6 +447,6 @@ async function createConversationRow({
     .select("id")
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) throw toAppError(error, "Could not create this chat. Please try again.");
   return conversation.id as string;
 }

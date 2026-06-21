@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { MOCK_PROPERTIES, MOCK_INQUIRIES } from "@/lib/mock-data";
+import { toAppError } from "@/lib/errors";
 
 // ── Derive real counts from mock data ────────────────────────────────────────
 // Instead of fake "500+ / 100+ / 50+" numbers that don't match reality,
@@ -324,14 +325,14 @@ export function useUpsertHomepageSection() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ sectionKey, data }: { sectionKey: string; data: unknown }) => {
-      if (!isSupabaseConfigured || !supabase) throw new Error("Supabase not configured");
+      if (!isSupabaseConfigured || !supabase) throw toAppError("Supabase not configured");
       const { error } = await supabase
         .from("homepage_content")
         .upsert(
           { section_key: sectionKey, data, updated_at: new Date().toISOString() },
           { onConflict: "section_key" }
         );
-      if (error) throw new Error(error.message);
+      if (error) throw toAppError(error, "Could not save homepage content. Please try again.");
     },
     onSuccess: (_d, { sectionKey }) => {
       qc.invalidateQueries({ queryKey: ["homepage_content"] });

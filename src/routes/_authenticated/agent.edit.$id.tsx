@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/useProperties";
 import { PROPERTY_TYPES } from "@/lib/constants";
 import { ImageUpload } from "@/components/property/ImageUpload";
+import { getErrorMessage } from "@/lib/errors";
 import type { PropertyType, ListingType } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/agent/edit/$id")({
@@ -106,7 +107,7 @@ function EditProperty() {
       toast.success("Property updated");
       navigate({ to: "/agent" });
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(getErrorMessage(e, "Could not update this property. Please try again."));
     }
   };
 
@@ -117,7 +118,7 @@ function EditProperty() {
       toast.success("Property deleted");
       navigate({ to: "/agent" });
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(getErrorMessage(e, "Could not delete this property. Please try again."));
     }
   };
 
