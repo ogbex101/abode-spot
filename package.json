@@ -77,9 +77,13 @@
     "globals": "^15.15.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.61.1",
-    "vite": "^7.3.1"
+    "vite": "^7.3.5"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "overrides": {
+    "esbuild": "0.28.1",
+    "js-yaml": "4.2.0"
   }
 }
