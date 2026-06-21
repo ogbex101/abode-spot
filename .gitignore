@@ -34,3 +34,4 @@ bun-debug.log*
 
 # TanStack Router (auto-generated, committed intentionally for now)
 # src/routeTree.gen.ts
+.vercel
