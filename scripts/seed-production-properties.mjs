@@ -35,53 +35,57 @@ const supabase = createClient(supabaseUrl, anonKey, {
 const img = (id) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=1200&q=80`;
 
 const listings = [
-  ["Sapphire Family Villa", "house", "sale", 185000000, 5, 5, 5600, "Lekki Phase 1", "Lagos", "Admiralty Way", "1564013799919-ab600027ffc6"],
-  ["Maple Duplex Residence", "house", "sale", 245000000, 5, 6, 6200, "Ikoyi", "Lagos", "Bourdillon Road", "1600596542815-ffad4c1539a9"],
-  ["Cedar View Detached Home", "house", "sale", 92000000, 4, 4, 4100, "Gwarinpa", "Abuja", "3rd Avenue", "1568605114967-8130f3a36994"],
-  ["Olive Grove Terrace House", "house", "rent", 9500000, 4, 4, 3600, "Asokoro", "Abuja", "Yakubu Gowon Crescent", "1600585154340-be6161a56a0c"],
-  ["Palm Court Four Bedroom Home", "house", "sale", 78000000, 4, 4, 3400, "Ajah", "Lagos", "Sangotedo Road", "1512917774080-9991f1c4c750"],
-  ["Orchid Crest Smart Home", "house", "rent", 12500000, 4, 5, 3900, "Port Harcourt", "Rivers", "Peter Odili Road", "1600047509807-ba8f99d2cdde"],
-  ["Meadow Park Bungalow", "house", "sale", 46500000, 3, 3, 2500, "Ibadan", "Oyo", "Jericho GRA", "1560184897-ae75f418493e"],
-  ["Lagoon Edge Townhouse", "house", "sale", 168000000, 4, 5, 4300, "Victoria Island", "Lagos", "Akin Adesola Street", "1600566753190-17f0baa2a6c3"],
-  ["Brookstone Estate Home", "house", "rent", 5200000, 3, 3, 2800, "Enugu", "Enugu", "Independence Layout", "1600607687939-ce8a6c25118c"],
-  ["Coral Bay Family House", "house", "sale", 58000000, 4, 4, 3100, "Uyo", "Akwa Ibom", "Shelter Afrique", "1600210492486-724fe5c67fb0"],
-  ["Eko Atlantic Studio Loft", "apartment", "rent", 4500000, 1, 1, 720, "Eko Atlantic", "Lagos", "Marina District", "1522708323590-d24dbb6b0267"],
-  ["Admiralty Two Bedroom Apartment", "apartment", "rent", 3800000, 2, 2, 1100, "Lekki Phase 1", "Lagos", "Admiralty Road", "1502672260266-1c1ef2d93688"],
-  ["Wuse Executive Apartment", "apartment", "sale", 68000000, 3, 3, 1800, "Wuse 2", "Abuja", "Adetokunbo Ademola Crescent", "1554995207-c18c203602cb"],
-  ["Maitama Serviced Apartment", "apartment", "rent", 11500000, 3, 4, 2100, "Maitama", "Abuja", "Aguiyi Ironsi Street", "1484154218962-a197022b5858"],
-  ["Yaba Compact Apartment", "apartment", "rent", 1850000, 1, 1, 600, "Yaba", "Lagos", "Herbert Macaulay Way", "1493809842364-78817add7ffb"],
-  ["Oniru Seaview Apartment", "apartment", "sale", 105000000, 3, 3, 2200, "Oniru", "Lagos", "Palace Road", "1598928506311-c55ded91a20c"],
-  ["Jabi Lake Penthouse", "apartment", "sale", 152000000, 4, 5, 3200, "Jabi", "Abuja", "Lake View Drive", "1616047006789-b7af5afb8c20"],
-  ["Ikeja GRA Apartment", "apartment", "rent", 4200000, 2, 2, 1200, "Ikeja GRA", "Lagos", "Isaac John Street", "1616486338812-3dadae4b4ace"],
-  ["Old GRA Port Harcourt Flat", "apartment", "rent", 3600000, 3, 3, 1600, "Old GRA", "Rivers", "Tombia Street", "1505693416388-ac5ce068fe85"],
-  ["Ring Road City Apartment", "apartment", "sale", 39500000, 2, 2, 1000, "Benin City", "Edo", "Airport Road", "1560448204-e02f11c3d0e2"],
-  ["Epe Residential Plot", "land", "sale", 12500000, null, null, 6480, "Epe", "Lagos", "Epe Resort Road", "1500382017468-9049fed747ef"],
-  ["Ibeju-Lekki Dry Land Parcel", "land", "sale", 18500000, null, null, 5400, "Ibeju-Lekki", "Lagos", "Free Trade Zone Axis", "1464822759023-fed622ff2c3b"],
-  ["Lugbe Mixed-Use Land", "land", "sale", 22000000, null, null, 7200, "Lugbe", "Abuja", "Airport Road Corridor", "1500530855697-b586d89ba3ee"],
-  ["Moniya Development Plot", "land", "sale", 8500000, null, null, 5000, "Ibadan", "Oyo", "Moniya Station Road", "1447752875215-b2761acb3c5d"],
-  ["Apo Resettlement Plot", "land", "sale", 36000000, null, null, 9000, "Apo", "Abuja", "Resettlement Zone E", "1500534314209-a25ddb2bd429"],
-  ["Eleko Beachfront Land", "land", "sale", 28000000, null, null, 10000, "Eleko", "Lagos", "Beach Road", "1500534623283-312aade485b7"],
-  ["Mpape Hillside Plot", "land", "sale", 16500000, null, null, 6400, "Mpape", "Abuja", "Hillside Extension", "1506744038136-46273834b3fb"],
-  ["Awka Commercial Land", "land", "sale", 24500000, null, null, 8200, "Awka", "Anambra", "Enugu-Onitsha Expressway", "1473773508845-188df298d2d1"],
-  ["Osogbo Estate Plot", "land", "sale", 7200000, null, null, 4800, "Osogbo", "Osun", "Oke-Fia Axis", "1469474968028-56623f02e42e"],
-  ["Abeokuta Gateway Land", "land", "sale", 9800000, null, null, 6000, "Abeokuta", "Ogun", "Kobape Road", "1470770841072-f978cf4d019e"],
-  ["Victoria Island Retail Showroom", "commercial", "rent", 18000000, null, 3, 4500, "Victoria Island", "Lagos", "Ahmadu Bello Way", "1486406146926-c627a92ad1ab"],
-  ["Lekki Phase 1 Office Suite", "commercial", "rent", 14500000, null, 4, 3800, "Lekki Phase 1", "Lagos", "Fola Osibo Street", "1497366216548-37526070297c"],
-  ["Ikeja Warehouse Facility", "commercial", "rent", 22000000, null, 4, 12500, "Ikeja", "Lagos", "Oba Akran Avenue", "1497366754035-f200968a6e72"],
-  ["Wuse 2 Corporate Office", "commercial", "sale", 320000000, null, 6, 9000, "Wuse 2", "Abuja", "Aminu Kano Crescent", "1497366811353-6870744d04b2"],
-  ["Port Harcourt Shopfront", "commercial", "rent", 6500000, null, 2, 1800, "Port Harcourt", "Rivers", "Aba Road", "1497215842964-222b430dc094"],
-  ["Surulere Mixed-Use Block", "commercial", "sale", 135000000, null, 5, 7200, "Surulere", "Lagos", "Bode Thomas Street", "1481277542470-605612bd2d61"],
-  ["Garki Medical Office Space", "commercial", "rent", 9800000, null, 4, 2600, "Garki", "Abuja", "Area 11", "1518005020951-eccb494ad742"],
-  ["Enugu Roadside Plaza", "commercial", "sale", 88000000, null, 4, 6400, "Enugu", "Enugu", "Ogui Road", "1464938050520-ef2270bb8ce8"],
-  ["Kano Trade Centre Unit", "commercial", "rent", 7200000, null, 3, 3000, "Kano", "Kano", "Zoo Road", "1504384308090-c894fdcc538d"],
-  ["Apapa Logistics Yard", "commercial", "sale", 410000000, null, 8, 24000, "Apapa", "Lagos", "Creek Road", "1494526585095-c41746248156"],
+  { legacyTitle: "Sapphire Family Villa", title: "Lekki Five-Bedroom Family Villa", propertyType: "house", listingType: "sale", price: 185000000, bedrooms: 5, bathrooms: 5, areaSqft: 5600, city: "Lekki Phase 1", state: "Lagos", address: "Lekki Phase 1, Lagos", imageIds: ["1605352081508-2e09927ecfe3", "1564013799919-ab600027ffc6", "1600585154340-be6161a56a0c"] },
+  { legacyTitle: "Maple Duplex Residence", title: "Ikoyi Five-Bedroom Detached Duplex", propertyType: "house", listingType: "sale", price: 245000000, bedrooms: 5, bathrooms: 6, areaSqft: 6200, city: "Ikoyi", state: "Lagos", address: "Ikoyi, Lagos", imageIds: ["1531300365552-da5abe58a725", "1600596542815-ffad4c1539a9", "1600047509807-ba8f99d2cdde"] },
+  { legacyTitle: "Cedar View Detached Home", title: "Gwarinpa Four-Bedroom Detached Home", propertyType: "house", listingType: "sale", price: 92000000, bedrooms: 4, bathrooms: 4, areaSqft: 4100, city: "Gwarinpa", state: "Abuja", address: "Gwarinpa, Abuja", imageIds: ["1568605114967-8130f3a36994", "1605352081428-500953badc02", "1560184897-ae75f418493e"] },
+  { legacyTitle: "Olive Grove Terrace House", title: "Asokoro Four-Bedroom Terrace House", propertyType: "house", listingType: "rent", price: 9500000, bedrooms: 4, bathrooms: 4, areaSqft: 3600, city: "Asokoro", state: "Abuja", address: "Asokoro, Abuja", imageIds: ["1600585154340-be6161a56a0c", "1600607687939-ce8a6c25118c", "1605352081508-2e09927ecfe3"] },
+  { legacyTitle: "Palm Court Four Bedroom Home", title: "Ajah Four-Bedroom Family Home", propertyType: "house", listingType: "sale", price: 78000000, bedrooms: 4, bathrooms: 4, areaSqft: 3400, city: "Ajah", state: "Lagos", address: "Ajah, Lagos", imageIds: ["1512917774080-9991f1c4c750", "1531300365552-da5abe58a725", "1600210492486-724fe5c67fb0"] },
+  { legacyTitle: "Orchid Crest Smart Home", title: "Port Harcourt Four-Bedroom Family House", propertyType: "house", listingType: "rent", price: 12500000, bedrooms: 4, bathrooms: 5, areaSqft: 3900, city: "Port Harcourt", state: "Rivers", address: "Port Harcourt, Rivers", imageIds: ["1600047509807-ba8f99d2cdde", "1600585154340-be6161a56a0c", "1605352081508-2e09927ecfe3"] },
+  { legacyTitle: "Meadow Park Bungalow", title: "Ibadan Three-Bedroom Bungalow", propertyType: "house", listingType: "sale", price: 46500000, bedrooms: 3, bathrooms: 3, areaSqft: 2500, city: "Ibadan", state: "Oyo", address: "Ibadan, Oyo", imageIds: ["1560184897-ae75f418493e", "1605352081428-500953badc02", "1568605114967-8130f3a36994"] },
+  { legacyTitle: "Lagoon Edge Townhouse", title: "Victoria Island Four-Bedroom Townhouse", propertyType: "house", listingType: "sale", price: 168000000, bedrooms: 4, bathrooms: 5, areaSqft: 4300, city: "Victoria Island", state: "Lagos", address: "Victoria Island, Lagos", imageIds: ["1600566753190-17f0baa2a6c3", "1531300365552-da5abe58a725", "1600596542815-ffad4c1539a9"] },
+  { legacyTitle: "Brookstone Estate Home", title: "Enugu Three-Bedroom Family Home", propertyType: "house", listingType: "rent", price: 5200000, bedrooms: 3, bathrooms: 3, areaSqft: 2800, city: "Enugu", state: "Enugu", address: "Enugu, Enugu", imageIds: ["1600607687939-ce8a6c25118c", "1600210492486-724fe5c67fb0", "1564013799919-ab600027ffc6"] },
+  { legacyTitle: "Coral Bay Family House", title: "Uyo Four-Bedroom Family House", propertyType: "house", listingType: "sale", price: 58000000, bedrooms: 4, bathrooms: 4, areaSqft: 3100, city: "Uyo", state: "Akwa Ibom", address: "Uyo, Akwa Ibom", imageIds: ["1600210492486-724fe5c67fb0", "1600585154340-be6161a56a0c", "1605352081508-2e09927ecfe3"] },
+  { legacyTitle: "Eko Atlantic Studio Loft", title: "Eko Atlantic Studio Apartment", propertyType: "apartment", listingType: "rent", price: 4500000, bedrooms: 1, bathrooms: 1, areaSqft: 720, city: "Eko Atlantic", state: "Lagos", address: "Eko Atlantic, Lagos", imageIds: ["1626882920560-80b382db2bc9", "1522708323590-d24dbb6b0267", "1502672260266-1c1ef2d93688"] },
+  { legacyTitle: "Admiralty Two Bedroom Apartment", title: "Lekki Phase 1 Two-Bedroom Apartment", propertyType: "apartment", listingType: "rent", price: 3800000, bedrooms: 2, bathrooms: 2, areaSqft: 1100, city: "Lekki Phase 1", state: "Lagos", address: "Lekki Phase 1, Lagos", imageIds: ["1652081577415-bfc04074328c", "1502672260266-1c1ef2d93688", "1554995207-c18c203602cb"] },
+  { legacyTitle: "Wuse Executive Apartment", title: "Wuse 2 Three-Bedroom Apartment", propertyType: "apartment", listingType: "sale", price: 68000000, bedrooms: 3, bathrooms: 3, areaSqft: 1800, city: "Wuse 2", state: "Abuja", address: "Wuse 2, Abuja", imageIds: ["1554995207-c18c203602cb", "1484154218962-a197022b5858", "1522708323590-d24dbb6b0267"] },
+  { legacyTitle: "Maitama Serviced Apartment", title: "Maitama Serviced Three-Bedroom Apartment", propertyType: "apartment", listingType: "rent", price: 11500000, bedrooms: 3, bathrooms: 4, areaSqft: 2100, city: "Maitama", state: "Abuja", address: "Maitama, Abuja", imageIds: ["1484154218962-a197022b5858", "1616047006789-b7af5afb8c20", "1502672260266-1c1ef2d93688"] },
+  { legacyTitle: "Yaba Compact Apartment", title: "Yaba One-Bedroom Apartment", propertyType: "apartment", listingType: "rent", price: 1850000, bedrooms: 1, bathrooms: 1, areaSqft: 600, city: "Yaba", state: "Lagos", address: "Yaba, Lagos", imageIds: ["1493809842364-78817add7ffb", "1522708323590-d24dbb6b0267", "1505693416388-ac5ce068fe85"] },
+  { legacyTitle: "Oniru Seaview Apartment", title: "Oniru Three-Bedroom Apartment", propertyType: "apartment", listingType: "sale", price: 105000000, bedrooms: 3, bathrooms: 3, areaSqft: 2200, city: "Oniru", state: "Lagos", address: "Oniru, Lagos", imageIds: ["1598928506311-c55ded91a20c", "1626882920560-80b382db2bc9", "1616486338812-3dadae4b4ace"] },
+  { legacyTitle: "Jabi Lake Penthouse", title: "Jabi Four-Bedroom Penthouse Apartment", propertyType: "apartment", listingType: "sale", price: 152000000, bedrooms: 4, bathrooms: 5, areaSqft: 3200, city: "Jabi", state: "Abuja", address: "Jabi, Abuja", imageIds: ["1616047006789-b7af5afb8c20", "1554995207-c18c203602cb", "1560448204-e02f11c3d0e2"] },
+  { legacyTitle: "Ikeja GRA Apartment", title: "Ikeja GRA Two-Bedroom Apartment", propertyType: "apartment", listingType: "rent", price: 4200000, bedrooms: 2, bathrooms: 2, areaSqft: 1200, city: "Ikeja GRA", state: "Lagos", address: "Ikeja GRA, Lagos", imageIds: ["1616486338812-3dadae4b4ace", "1652081577415-bfc04074328c", "1522708323590-d24dbb6b0267"] },
+  { legacyTitle: "Old GRA Port Harcourt Flat", title: "Port Harcourt Three-Bedroom Flat", propertyType: "apartment", listingType: "rent", price: 3600000, bedrooms: 3, bathrooms: 3, areaSqft: 1600, city: "Port Harcourt", state: "Rivers", address: "Port Harcourt, Rivers", imageIds: ["1505693416388-ac5ce068fe85", "1560448204-e02f11c3d0e2", "1484154218962-a197022b5858"] },
+  { legacyTitle: "Ring Road City Apartment", title: "Benin City Two-Bedroom Apartment", propertyType: "apartment", listingType: "sale", price: 39500000, bedrooms: 2, bathrooms: 2, areaSqft: 1000, city: "Benin City", state: "Edo", address: "Benin City, Edo", imageIds: ["1560448204-e02f11c3d0e2", "1502672260266-1c1ef2d93688", "1493809842364-78817add7ffb"] },
+  { legacyTitle: "Epe Residential Plot", title: "Epe Residential Plot", propertyType: "land", listingType: "sale", price: 12500000, bedrooms: null, bathrooms: null, areaSqft: 6480, city: "Epe", state: "Lagos", address: "Epe, Lagos", imageIds: ["1500382017468-9049fed747ef", "1623411579348-548e4c9d99fb", "1500530855697-b586d89ba3ee"] },
+  { legacyTitle: "Ibeju-Lekki Dry Land Parcel", title: "Ibeju-Lekki Dry Land Parcel", propertyType: "land", listingType: "sale", price: 18500000, bedrooms: null, bathrooms: null, areaSqft: 5400, city: "Ibeju-Lekki", state: "Lagos", address: "Ibeju-Lekki, Lagos", imageIds: ["1464822759023-fed622ff2c3b", "1500534623283-312aade485b7", "1500382017468-9049fed747ef"] },
+  { legacyTitle: "Lugbe Mixed-Use Land", title: "Lugbe Mixed-Use Land", propertyType: "land", listingType: "sale", price: 22000000, bedrooms: null, bathrooms: null, areaSqft: 7200, city: "Lugbe", state: "Abuja", address: "Lugbe, Abuja", imageIds: ["1500530855697-b586d89ba3ee", "1685222253612-0d6ee3487be2", "1473773508845-188df298d2d1"] },
+  { legacyTitle: "Moniya Development Plot", title: "Ibadan Development Plot", propertyType: "land", listingType: "sale", price: 8500000, bedrooms: null, bathrooms: null, areaSqft: 5000, city: "Ibadan", state: "Oyo", address: "Ibadan, Oyo", imageIds: ["1447752875215-b2761acb3c5d", "1623411839339-b0f69bbd2064", "1469474968028-56623f02e42e"] },
+  { legacyTitle: "Apo Resettlement Plot", title: "Apo Residential Plot", propertyType: "land", listingType: "sale", price: 36000000, bedrooms: null, bathrooms: null, areaSqft: 9000, city: "Apo", state: "Abuja", address: "Apo, Abuja", imageIds: ["1500534314209-a25ddb2bd429", "1506744038136-46273834b3fb", "1470770841072-f978cf4d019e"] },
+  { legacyTitle: "Eleko Beachfront Land", title: "Eleko Open Land Parcel", propertyType: "land", listingType: "sale", price: 28000000, bedrooms: null, bathrooms: null, areaSqft: 10000, city: "Eleko", state: "Lagos", address: "Eleko, Lagos", imageIds: ["1500534623283-312aade485b7", "1706398978116-403d732ed775", "1464822759023-fed622ff2c3b"] },
+  { legacyTitle: "Mpape Hillside Plot", title: "Mpape Hillside Plot", propertyType: "land", listingType: "sale", price: 16500000, bedrooms: null, bathrooms: null, areaSqft: 6400, city: "Mpape", state: "Abuja", address: "Mpape, Abuja", imageIds: ["1506744038136-46273834b3fb", "1500534314209-a25ddb2bd429", "1500530855697-b586d89ba3ee"] },
+  { legacyTitle: "Awka Commercial Land", title: "Awka Commercial Land", propertyType: "land", listingType: "sale", price: 24500000, bedrooms: null, bathrooms: null, areaSqft: 8200, city: "Awka", state: "Anambra", address: "Awka, Anambra", imageIds: ["1473773508845-188df298d2d1", "1500382017468-9049fed747ef", "1623411579348-548e4c9d99fb"] },
+  { legacyTitle: "Osogbo Estate Plot", title: "Osogbo Estate Plot", propertyType: "land", listingType: "sale", price: 7200000, bedrooms: null, bathrooms: null, areaSqft: 4800, city: "Osogbo", state: "Osun", address: "Osogbo, Osun", imageIds: ["1469474968028-56623f02e42e", "1447752875215-b2761acb3c5d", "1470770841072-f978cf4d019e"] },
+  { legacyTitle: "Abeokuta Gateway Land", title: "Abeokuta Gateway Land", propertyType: "land", listingType: "sale", price: 9800000, bedrooms: null, bathrooms: null, areaSqft: 6000, city: "Abeokuta", state: "Ogun", address: "Abeokuta, Ogun", imageIds: ["1470770841072-f978cf4d019e", "1685222253612-0d6ee3487be2", "1500530855697-b586d89ba3ee"] },
+  { legacyTitle: "Victoria Island Retail Showroom", title: "Victoria Island Retail Showroom", propertyType: "commercial", listingType: "rent", price: 18000000, bedrooms: null, bathrooms: 3, areaSqft: 4500, city: "Victoria Island", state: "Lagos", address: "Victoria Island, Lagos", imageIds: ["1486406146926-c627a92ad1ab", "1572457403736-88ead9cf03ba", "1497366216548-37526070297c"] },
+  { legacyTitle: "Lekki Phase 1 Office Suite", title: "Lekki Phase 1 Office Suite", propertyType: "commercial", listingType: "rent", price: 14500000, bedrooms: null, bathrooms: 4, areaSqft: 3800, city: "Lekki Phase 1", state: "Lagos", address: "Lekki Phase 1, Lagos", imageIds: ["1497366216548-37526070297c", "1652081577415-bfc04074328c", "1497366811353-6870744d04b2"] },
+  { legacyTitle: "Ikeja Warehouse Facility", title: "Ikeja Warehouse Facility", propertyType: "commercial", listingType: "rent", price: 22000000, bedrooms: null, bathrooms: 4, areaSqft: 12500, city: "Ikeja", state: "Lagos", address: "Ikeja, Lagos", imageIds: ["1715026323282-073e1a65576a", "1685459143178-2c24b66d44df", "1694885169342-909981fb408a"] },
+  { legacyTitle: "Wuse 2 Corporate Office", title: "Wuse 2 Corporate Office", propertyType: "commercial", listingType: "sale", price: 320000000, bedrooms: null, bathrooms: 6, areaSqft: 9000, city: "Wuse 2", state: "Abuja", address: "Wuse 2, Abuja", imageIds: ["1497366811353-6870744d04b2", "1486406146926-c627a92ad1ab", "1497366216548-37526070297c"] },
+  { legacyTitle: "Port Harcourt Shopfront", title: "Port Harcourt Shopfront", propertyType: "commercial", listingType: "rent", price: 6500000, bedrooms: null, bathrooms: 2, areaSqft: 1800, city: "Port Harcourt", state: "Rivers", address: "Port Harcourt, Rivers", imageIds: ["1497215842964-222b430dc094", "1572457403736-88ead9cf03ba", "1486406146926-c627a92ad1ab"] },
+  { legacyTitle: "Surulere Mixed-Use Block", title: "Surulere Mixed-Use Commercial Block", propertyType: "commercial", listingType: "sale", price: 135000000, bedrooms: null, bathrooms: 5, areaSqft: 7200, city: "Surulere", state: "Lagos", address: "Surulere, Lagos", imageIds: ["1481277542470-605612bd2d61", "1497366754035-f200968a6e72", "1572457403736-88ead9cf03ba"] },
+  { legacyTitle: "Garki Medical Office Space", title: "Garki Medical Office Space", propertyType: "commercial", listingType: "rent", price: 9800000, bedrooms: null, bathrooms: 4, areaSqft: 2600, city: "Garki", state: "Abuja", address: "Garki, Abuja", imageIds: ["1518005020951-eccb494ad742", "1497366216548-37526070297c", "1497366811353-6870744d04b2"] },
+  { legacyTitle: "Enugu Roadside Plaza", title: "Enugu Roadside Plaza", propertyType: "commercial", listingType: "sale", price: 88000000, bedrooms: null, bathrooms: 4, areaSqft: 6400, city: "Enugu", state: "Enugu", address: "Enugu, Enugu", imageIds: ["1464938050520-ef2270bb8ce8", "1572457403736-88ead9cf03ba", "1486406146926-c627a92ad1ab"] },
+  { legacyTitle: "Kano Trade Centre Unit", title: "Kano Trade Centre Unit", propertyType: "commercial", listingType: "rent", price: 7200000, bedrooms: null, bathrooms: 3, areaSqft: 3000, city: "Kano", state: "Kano", address: "Kano, Kano", imageIds: ["1504384308090-c894fdcc538d", "1497215842964-222b430dc094", "1497366216548-37526070297c"] },
+  { legacyTitle: "Apapa Logistics Yard", title: "Apapa Logistics Yard", propertyType: "commercial", listingType: "sale", price: 410000000, bedrooms: null, bathrooms: 8, areaSqft: 24000, city: "Apapa", state: "Lagos", address: "Apapa, Lagos", imageIds: ["1694885169342-909981fb408a", "1715026323282-073e1a65576a", "1685459143178-2c24b66d44df"] },
 ];
 
 const descriptionByType = {
-  house: "A move-in-ready residential home with practical rooms, natural light, secure parking, and easy access to daily amenities.",
-  apartment: "A well-finished apartment suited for city living, with efficient space planning, modern fittings, and convenient transport access.",
-  land: "A documented land opportunity in a growing corridor, suitable for residential or mixed development subject to local planning approval.",
-  commercial: "A functional commercial property positioned for office, retail, logistics, or service-led businesses with strong access routes.",
+  house: (city, state) =>
+    `A move-in-ready family home in ${city}, ${state}, with practical living areas, secure parking, and access to everyday amenities.`,
+  apartment: (city, state) =>
+    `A well-finished apartment in ${city}, ${state}, suited for city living with modern fittings, efficient room layouts, and convenient access to daily services.`,
+  land: (city, state) =>
+    `A documented land opportunity around ${city}, ${state}, suitable for residential or mixed-use planning subject to local approvals.`,
+  commercial: (city, state) =>
+    `A functional commercial property around ${city}, ${state}, suitable for office, retail, service, or logistics use with broad access routes.`,
 };
 
 async function requireOk(promise, label) {
@@ -108,19 +112,21 @@ if (!agents || agents.length === 0) {
   throw new Error("No seed agents found. Run the smoke setup first or create approved agent accounts.");
 }
 
-const titles = listings.map(([title]) => title);
+const titles = Array.from(
+  new Set(listings.flatMap(({ legacyTitle, title }) => [legacyTitle, title]).filter(Boolean))
+);
 await requireOk(
   supabase.from("properties").delete().in("title", titles),
   "Clear existing seeded properties"
 );
 
 const now = Date.now();
-const rows = listings.map((item, index) => {
-  const [title, propertyType, listingType, price, bedrooms, bathrooms, areaSqft, city, state, address, imageId] = item;
+const rows = listings.map((listing, index) => {
+  const { title, propertyType, listingType, price, bedrooms, bathrooms, areaSqft, city, state, address, imageIds } = listing;
   const agent = agents[index % agents.length];
   return {
     title,
-    description: `${descriptionByType[propertyType]} ${city}, ${state} location with verified agent support through AbodeSpot.`,
+    description: `${descriptionByType[propertyType](city, state)} Listed with verified agent support through AbodeSpot.`,
     price,
     bedrooms,
     bathrooms,
@@ -131,11 +137,11 @@ const rows = listings.map((item, index) => {
     city,
     state,
     zip_code: null,
-    images: [img(imageId)],
+    images: imageIds.map(img),
     agent_id: agent.id,
     status: "approved",
     featured: index % 7 === 0,
-    views: 80 + index * 17,
+    views: 0,
     created_at: new Date(now - index * 86_400_000).toISOString(),
   };
 });
