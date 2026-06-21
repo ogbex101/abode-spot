@@ -9,11 +9,13 @@ export function PropertyGrid({
   loading,
   emptyTitle = "No properties found",
   emptyDescription = "Try adjusting your filters.",
+  priorityCount = 3,
 }: {
   properties: Property[];
   loading?: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
+  priorityCount?: number;
 }) {
   if (loading) {
     return (
@@ -27,7 +29,9 @@ export function PropertyGrid({
   }
   return (
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-      {properties.map((p) => <PropertyCard key={p.id} property={p} />)}
+      {properties.map((p, index) => (
+        <PropertyCard key={p.id} property={p} priority={index < priorityCount} />
+      ))}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PropertyGrid } from "@/components/property/PropertyGrid";
 import { useProperties, type PropertyFilters } from "@/hooks/useProperties";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { PROPERTY_TYPES } from "@/lib/constants";
 import type { PropertyType } from "@/lib/types";
 import { Search, SlidersHorizontal } from "lucide-react";
@@ -32,15 +33,18 @@ function PropertiesPage() {
   const [type, setType] = useState<PropertyType | "all">(sp.type ?? "all");
   const [beds, setBeds] = useState<string>(sp.beds ? String(sp.beds) : "any");
   const [listing, setListing] = useState<"all" | "sale" | "rent">(sp.listing ?? "all");
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   const filters: PropertyFilters = {
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     propertyType: type,
     listingType: listing,
     bedrooms: beds === "any" ? undefined : Number(beds),
     status: "approved",
   };
   const { data, isLoading } = useProperties(filters);
+  const isInitialLoading = isLoading && !data;
+  const listingCount = data?.length ?? 0;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 md:px-6">
@@ -53,7 +57,7 @@ function PropertiesPage() {
           All properties
         </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          {isLoading ? "Loading listings…" : `${data?.length ?? 0} listing${(data?.length ?? 0) === 1 ? "" : "s"} found`}
+          {isInitialLoading ? "Loading listings…" : `${listingCount} listing${listingCount === 1 ? "" : "s"} found`}
         </p>
       </div>
 
@@ -106,7 +110,7 @@ function PropertiesPage() {
         </div>
       </div>
 
-      <PropertyGrid properties={data ?? []} loading={isLoading} />
+      <PropertyGrid properties={data ?? []} loading={isInitialLoading} />
     </div>
   );
 }

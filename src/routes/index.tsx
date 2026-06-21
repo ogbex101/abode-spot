@@ -2,15 +2,14 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   Search, MapPin, Building2, Users, Award, ArrowRight, Star,
-  TrendingUp, Shield, Home as HomeIcon, CheckCircle2, Quote, ChevronRight,
-  Zap, Globe, Clock, HeartHandshake, Phone, Mail, MessageSquare
+  TrendingUp, Shield, CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PropertyGrid } from "@/components/property/PropertyGrid";
 import { useProperties } from "@/hooks/useProperties";
-import { useHomepageSection } from "@/hooks/useHomepageContent";
+import { useHomepageSections } from "@/hooks/useHomepageContent";
 import { PROPERTY_TYPES } from "@/lib/constants";
 import type { PropertyType } from "@/lib/types";
 
@@ -24,18 +23,7 @@ type HeroContent = {
 };
 type CategoryItem = { type: string; label: string; icon: string; desc: string; img: string; count: string };
 type BrowseCatContent = { heading: string; subtext: string; categories: CategoryItem[] };
-type Step = { step: string; title: string; desc: string };
-type HowContent = { heading: string; subtext: string; steps: Step[] };
-type Feature = { title: string; desc: string };
-type WhyContent = { heading: string; features: Feature[] };
-type Testimonial = { name: string; role: string; rating: number; text: string };
-type TestimonialsContent = { heading: string; items: Testimonial[] };
-type CityItem = { city: string; state: string; count: string; img: string };
-type CitiesContent = { heading: string; locations: CityItem[] };
-type CtaContent = {
-  heading: string; subtext: string; contact_heading: string; contact_subtext: string;
-  phone: string; email: string; hours: string;
-};
+const HOME_SECTION_KEYS = ["hero", "browse_categories"] as const;
 
 function Home() {
   const navigate = useNavigate();
@@ -44,26 +32,19 @@ function Home() {
   const [beds, setBeds] = useState<string>("any");
   const featured = useProperties({ featured: true });
 
-  const hero = useHomepageSection<HeroContent>("hero");
-  const browseCat = useHomepageSection<BrowseCatContent>("browse_categories");
-  const howItWorks = useHomepageSection<HowContent>("how_it_works");
-  const whyUs = useHomepageSection<WhyContent>("why_us");
-  const testimonials = useHomepageSection<TestimonialsContent>("testimonials");
-  const cities = useHomepageSection<CitiesContent>("cities");
-  const cta = useHomepageSection<CtaContent>("agent_cta");
+  const homepage = useHomepageSections(HOME_SECTION_KEYS);
 
-  const h = hero.data || {
+  const h = (homepage.data?.hero as HeroContent | undefined) || {
     badge: "500+ verified listings", heading_line1: "Find where", heading_accent: "life happens.",
     subtext: "Curated homes, transparent prices, and verified agents",
     background_image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=2400&q=90",
     stat_properties: "500+", stat_clients: "100+", stat_agents: "50+"
   };
-  const bc = browseCat.data || { heading: "Browse by property type", subtext: "", categories: [] };
-  const hiw = howItWorks.data || { heading: "How it works", subtext: "", steps: [] };
-  const wu = whyUs.data || { heading: "Why choose us", features: [] };
-  const testi = testimonials.data || { heading: "Testimonials", items: [] };
-  const citData = cities.data || { heading: "Explore cities", locations: [] };
-  const ctaData = cta.data || { heading: "List your property", subtext: "", contact_heading: "", contact_subtext: "", phone: "", email: "", hours: "" };
+  const bc = (homepage.data?.browse_categories as BrowseCatContent | undefined) || {
+    heading: "Browse by property type",
+    subtext: "",
+    categories: [],
+  };
 
   const handleSearch = () => {
     navigate({
@@ -171,7 +152,13 @@ function Home() {
             <div className="hidden lg:flex justify-end">
               <div className="animate-fade-up delay-300 relative">
                 <div className="rounded-2xl overflow-hidden bg-white/95 backdrop-blur-md shadow-2xl w-80 border border-white/30">
-                  <img src="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&q=80" alt="Featured property" className="h-48 w-full object-cover" />
+                  <img
+                    src="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&q=80"
+                    alt="Featured property"
+                    loading="eager"
+                    decoding="async"
+                    className="h-48 w-full object-cover"
+                  />
                   <div className="p-4">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-semibold uppercase tracking-widest text-primary">Featured</span>
@@ -217,7 +204,15 @@ function Home() {
               onClick={() => navigate({ to: "/properties", search: { type: cat.type } as never })}
               className="group relative overflow-hidden rounded-2xl aspect-[3/4] text-left hover:shadow-2xl transition-all duration-300 hover:-translate-y-1"
             >
-              {cat.img ? <img src={cat.img} alt={cat.label} className="absolute inset-0 h-full w-full object-cover group-hover:scale-110 transition-transform duration-500" /> : <div className="absolute inset-0 bg-muted flex items-center justify-center text-4xl">{cat.icon}</div>}
+              {cat.img ? (
+                <img
+                  src={cat.img}
+                  alt={cat.label}
+                  loading="lazy"
+                  decoding="async"
+                  className="absolute inset-0 h-full w-full object-cover group-hover:scale-110 transition-transform duration-500"
+                />
+              ) : <div className="absolute inset-0 bg-muted flex items-center justify-center text-4xl">{cat.icon}</div>}
               <div className="absolute inset-0 bg-gradient-to-t from-[oklch(0.10_0.06_160/0.85)] via-[oklch(0.10_0.06_160/0.3)] to-transparent" />
               <div className="absolute bottom-0 p-4">
                 <div className="text-2xl mb-1">{cat.icon}</div>
@@ -239,7 +234,7 @@ function Home() {
             </div>
             <Link to="/properties" className="hidden items-center gap-1.5 text-sm font-medium text-primary hover:gap-3 transition-all md:flex">View all <ArrowRight className="h-4 w-4" /></Link>
           </div>
-          <PropertyGrid properties={featured.data ?? []} loading={featured.isLoading} />
+          <PropertyGrid properties={featured.data ?? []} loading={featured.isLoading && !featured.data} />
           <div className="mt-8 text-center md:hidden">
             <Link to="/properties"><Button variant="outline" className="gap-2">View all properties <ArrowRight className="h-4 w-4" /></Button></Link>
           </div>

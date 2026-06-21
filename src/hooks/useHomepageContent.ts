@@ -3,6 +3,10 @@ import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { MOCK_PROPERTIES, MOCK_INQUIRIES } from "@/lib/mock-data";
 import { toAppError } from "@/lib/errors";
 
+const HOMEPAGE_CACHE_MS = 10 * 60 * 1000;
+const HOMEPAGE_ADMIN_CACHE_MS = 5 * 60 * 1000;
+const PROPERTY_TYPES_FOR_COUNTS = ["house", "apartment", "land", "commercial"] as const;
+
 // ── Derive real counts from mock data ────────────────────────────────────────
 // Instead of fake "500+ / 100+ / 50+" numbers that don't match reality,
 // we compute the actual figures from mock data (or real DB when connected).
@@ -173,76 +177,152 @@ export const DEFAULT_HOMEPAGE_CONTENT: Record<string, unknown> = {
   },
 };
 
-// ── Live stat fetcher (used when Supabase IS connected) ───────────────────────
-// Pulls real counts from the DB so the homepage always shows accurate numbers.
-async function fetchLiveStats(): Promise<{
+type HomepageMetrics = {
   stat_properties: string;
   stat_clients: string;
   stat_agents: string;
-}> {
-  if (!isSupabaseConfigured || !supabase) {
-    return {
-      stat_properties: `${MOCK_PROPERTY_COUNT}`,
-      stat_clients: `${MOCK_CLIENT_COUNT}`,
-      stat_agents: `${MOCK_AGENT_COUNT}`,
-    };
-  }
+  categoryCounts: Record<string, number>;
+  cityCounts: Record<string, number>;
+};
 
-  const [propRes, clientRes, agentRes] = await Promise.all([
-    supabase.from("properties").select("id", { count: "exact", head: true }).eq("status", "approved"),
-    supabase.from("users").select("id", { count: "exact", head: true }).eq("role", "user"),
-    supabase.from("users").select("id", { count: "exact", head: true }).eq("role", "agent"),
-  ]);
-
+function mockHomepageMetrics(cityNames: string[] = []): HomepageMetrics {
   return {
-    stat_properties: `${propRes.count ?? MOCK_PROPERTY_COUNT}`,
-    stat_clients: `${clientRes.count ?? MOCK_CLIENT_COUNT}`,
-    stat_agents: `${agentRes.count ?? MOCK_AGENT_COUNT}`,
-  };
-}
-
-// ── Live category count fetcher ───────────────────────────────────────────────
-async function fetchCategoryCounts(): Promise<Record<string, number>> {
-  if (!isSupabaseConfigured || !supabase) {
-    return {
+    stat_properties: `${MOCK_PROPERTY_COUNT}`,
+    stat_clients: `${MOCK_CLIENT_COUNT}`,
+    stat_agents: `${MOCK_AGENT_COUNT}`,
+    categoryCounts: {
       house: mockCountByType("house"),
       apartment: mockCountByType("apartment"),
       land: mockCountByType("land"),
       commercial: mockCountByType("commercial"),
+    },
+    cityCounts: Object.fromEntries(cityNames.map((city) => [city, mockCountByCity(city)])),
+  };
+}
+
+async function fetchHomepageMetrics(cityNames: string[] = []): Promise<HomepageMetrics> {
+  if (!isSupabaseConfigured || !supabase) {
+    return mockHomepageMetrics(cityNames);
+  }
+
+  const [propertiesRes, usersRes] = await Promise.all([
+    supabase.from("properties").select("property_type, city").eq("status", "approved"),
+    supabase.from("users").select("role"),
+  ]);
+
+  const fallback = mockHomepageMetrics(cityNames);
+  const properties = propertiesRes.error ? [] : (propertiesRes.data ?? []);
+  const users = usersRes.error ? [] : (usersRes.data ?? []);
+  const categoryCounts: Record<string, number> = {};
+
+  for (const type of PROPERTY_TYPES_FOR_COUNTS) {
+    categoryCounts[type] = properties.filter((property) => property.property_type === type).length;
+  }
+
+  const cityCounts = Object.fromEntries(
+    cityNames.map((city) => [
+      city,
+      properties.filter((property) =>
+        (property.city ?? "").toLowerCase().includes(city.toLowerCase())
+      ).length,
+    ])
+  );
+
+  return {
+    stat_properties: propertiesRes.error ? fallback.stat_properties : `${properties.length}`,
+    stat_clients: usersRes.error
+      ? fallback.stat_clients
+      : `${users.filter((user) => user.role === "user").length}`,
+    stat_agents: usersRes.error
+      ? fallback.stat_agents
+      : `${users.filter((user) => user.role === "agent").length}`,
+    categoryCounts: propertiesRes.error ? fallback.categoryCounts : categoryCounts,
+    cityCounts: propertiesRes.error ? fallback.cityCounts : cityCounts,
+  };
+}
+
+async function fetchHomepageBaseSections(sectionKeys: readonly string[]) {
+  const sections: Record<string, unknown> = {};
+
+  for (const sectionKey of sectionKeys) {
+    sections[sectionKey] = DEFAULT_HOMEPAGE_CONTENT[sectionKey];
+  }
+
+  if (!isSupabaseConfigured || !supabase || sectionKeys.length === 0) {
+    return sections;
+  }
+
+  const { data, error } = await supabase
+    .from("homepage_content")
+    .select("section_key, data")
+    .in("section_key", [...sectionKeys]);
+
+  if (error || !data) return sections;
+
+  for (const row of data) {
+    sections[row.section_key] = row.data;
+  }
+
+  return sections;
+}
+
+function collectCityNames(sections: Record<string, unknown>) {
+  const cities = sections.cities as { locations?: { city: string }[] } | undefined;
+  return cities?.locations?.map((location) => location.city) ?? [];
+}
+
+function applyLiveMetrics(sections: Record<string, unknown>, metrics: HomepageMetrics) {
+  const result: Record<string, unknown> = { ...sections };
+
+  if (result.hero) {
+    const { categoryCounts: _categories, cityCounts: _cities, ...stats } = metrics;
+    result.hero = { ...(result.hero as object), ...stats };
+  }
+
+  if (result.browse_categories) {
+    const browse = result.browse_categories as {
+      heading: string;
+      subtext: string;
+      categories: { type: string; count: string; [key: string]: unknown }[];
+    };
+    result.browse_categories = {
+      ...browse,
+      categories: browse.categories.map((category) => ({
+        ...category,
+        count: `${metrics.categoryCounts[category.type] ?? category.count}`,
+      })),
     };
   }
 
-  const types = ["house", "apartment", "land", "commercial"] as const;
-  const results = await Promise.all(
-    types.map((t) =>
-      supabase!
-        .from("properties")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "approved")
-        .eq("property_type", t)
-    )
-  );
-
-  return Object.fromEntries(types.map((t, i) => [t, results[i].count ?? 0]));
-}
-
-// ── Live city count fetcher ───────────────────────────────────────────────────
-async function fetchCityCounts(cities: string[]): Promise<Record<string, number>> {
-  if (!isSupabaseConfigured || !supabase) {
-    return Object.fromEntries(cities.map((c) => [c, mockCountByCity(c)]));
+  if (result.cities) {
+    const cities = result.cities as {
+      heading: string;
+      locations: { city: string; count: string; [key: string]: unknown }[];
+    };
+    result.cities = {
+      ...cities,
+      locations: cities.locations.map((location) => ({
+        ...location,
+        count: `${metrics.cityCounts[location.city] ?? location.count}`,
+      })),
+    };
   }
 
-  const results = await Promise.all(
-    cities.map((c) =>
-      supabase!
-        .from("properties")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "approved")
-        .ilike("city", `%${c}%`)
-    )
-  );
+  return result;
+}
 
-  return Object.fromEntries(cities.map((c, i) => [c, results[i].count ?? 0]));
+async function fetchHomepageSections(sectionKeys: readonly string[]) {
+  const sections = await fetchHomepageBaseSections(sectionKeys);
+  const metrics = await fetchHomepageMetrics(collectCityNames(sections));
+  return applyLiveMetrics(sections, metrics);
+}
+
+export function useHomepageSections(sectionKeys: readonly string[]) {
+  return useQuery({
+    queryKey: ["homepage_content", "sections", sectionKeys],
+    queryFn: () => fetchHomepageSections(sectionKeys),
+    staleTime: HOMEPAGE_CACHE_MS,
+  });
 }
 
 // ── useHomepageSection ────────────────────────────────────────────────────────
@@ -252,57 +332,9 @@ export function useHomepageSection<T = unknown>(sectionKey: string): {
 } {
   const defaults = DEFAULT_HOMEPAGE_CONTENT[sectionKey] as T;
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["homepage_content", sectionKey],
-    queryFn: async () => {
-      // Step 1: Try to load content from Supabase homepage_content table
-      let base: T = defaults;
-      if (isSupabaseConfigured && supabase) {
-        const { data: row, error } = await supabase
-          .from("homepage_content")
-          .select("data")
-          .eq("section_key", sectionKey)
-          .maybeSingle();
-        if (!error && row) base = row.data as T;
-      }
+  const { data, isLoading } = useHomepageSections([sectionKey]);
 
-      // Step 2: Overlay live counts on top so numbers are always accurate
-      if (sectionKey === "hero") {
-        const stats = await fetchLiveStats();
-        return { ...(base as object), ...stats } as T;
-      }
-
-      if (sectionKey === "browse_categories") {
-        const counts = await fetchCategoryCounts();
-        const b = base as { heading: string; subtext: string; categories: { type: string; count: string; [k: string]: unknown }[] };
-        return {
-          ...b,
-          categories: b.categories.map((cat) => ({
-            ...cat,
-            count: `${counts[cat.type] ?? cat.count}`,
-          })),
-        } as T;
-      }
-
-      if (sectionKey === "cities") {
-        const b = base as { heading: string; locations: { city: string; count: string; [k: string]: unknown }[] };
-        const cityNames = b.locations.map((l) => l.city);
-        const counts = await fetchCityCounts(cityNames);
-        return {
-          ...b,
-          locations: b.locations.map((loc) => ({
-            ...loc,
-            count: `${counts[loc.city] ?? loc.count}`,
-          })),
-        } as T;
-      }
-
-      return base;
-    },
-    staleTime: 60_000,
-  });
-
-  return { data: data ?? defaults, isLoading };
+  return { data: (data?.[sectionKey] as T | undefined) ?? defaults, isLoading };
 }
 
 export function useAllHomepageContent() {
@@ -318,6 +350,7 @@ export function useAllHomepageContent() {
       }
       return result;
     },
+    staleTime: HOMEPAGE_ADMIN_CACHE_MS,
   });
 }
 
@@ -334,7 +367,7 @@ export function useUpsertHomepageSection() {
         );
       if (error) throw toAppError(error, "Could not save homepage content. Please try again.");
     },
-    onSuccess: (_d, { sectionKey }) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["homepage_content"] });
     },
   });

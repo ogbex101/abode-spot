@@ -1,5 +1,5 @@
 // Properties data layer — uses Supabase when configured, mock data otherwise.
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { MOCK_PROPERTIES } from "@/lib/mock-data";
 import type { Property, PropertyStatus, PropertyType, ListingType } from "@/lib/types";
@@ -18,15 +18,42 @@ export interface PropertyFilters {
   featured?: boolean;
 }
 
+function normalizeSearchTerm(search: string | undefined) {
+  const normalized = search?.trim().replace(/\s+/g, " ");
+  return normalized || undefined;
+}
+
+function normalizeFilters(filters: PropertyFilters): PropertyFilters {
+  const normalized: PropertyFilters = { ...filters };
+  const search = normalizeSearchTerm(filters.search);
+  if (search) normalized.search = search;
+  else delete normalized.search;
+  return normalized;
+}
+
+function toPostgrestSearchTerm(search: string) {
+  return search.replace(/[%,()*]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function invalidatePropertyCaches(qc: QueryClient, ids: string[] = []) {
+  qc.invalidateQueries({ queryKey: ["properties"] });
+  qc.invalidateQueries({ queryKey: ["homepage_content"] });
+  ids.forEach((id) => qc.invalidateQueries({ queryKey: ["property", id] }));
+}
+
 function applyFilters(props: Property[], f: PropertyFilters): Property[] {
   return props.filter((p) => {
     if (f.search) {
       const q = f.search.toLowerCase();
-      if (
-        !p.title.toLowerCase().includes(q) &&
-        !(p.city ?? "").toLowerCase().includes(q) &&
-        !(p.address ?? "").toLowerCase().includes(q)
-      )
+      const searchable = [
+        p.title,
+        p.city,
+        p.state,
+        p.address,
+        p.property_type,
+        p.listing_type,
+      ];
+      if (!searchable.some((value) => (value ?? "").toLowerCase().includes(q)))
         return false;
     }
     if (f.city && p.city?.toLowerCase() !== f.city.toLowerCase()) return false;
@@ -44,38 +71,51 @@ function applyFilters(props: Property[], f: PropertyFilters): Property[] {
 }
 
 export function useProperties(filters: PropertyFilters = {}) {
+  const normalizedFilters = normalizeFilters(filters);
+
   return useQuery({
-    queryKey: ["properties", filters],
+    queryKey: ["properties", normalizedFilters],
     queryFn: async () => {
       if (!isSupabaseConfigured || !supabase) {
-        const effectiveStatus = filters.status ?? "approved";
+        const effectiveStatus = normalizedFilters.status ?? "approved";
         // In mock mode, ignore agentId so agents see all mock data
-        const { agentId: _ignored, ...filtersWithoutAgent } = filters;
+        const { agentId: _ignored, ...filtersWithoutAgent } = normalizedFilters;
         return applyFilters(MOCK_PROPERTIES, { ...filtersWithoutAgent, status: effectiveStatus });
       }
       let q = supabase
         .from("properties")
         .select("*, agent:users!properties_agent_id_fkey(*)")
         .order("created_at", { ascending: false });
-      if (filters.status && filters.status !== "all") q = q.eq("status", filters.status);
-      if (filters.propertyType && filters.propertyType !== "all")
-        q = q.eq("property_type", filters.propertyType);
-      if (filters.listingType && filters.listingType !== "all")
-        q = q.eq("listing_type", filters.listingType);
-      if (isNum(filters.minPrice)) q = q.gte("price", filters.minPrice!);
-      if (isNum(filters.maxPrice)) q = q.lte("price", filters.maxPrice!);
-      if (isNum(filters.bedrooms)) q = q.gte("bedrooms", filters.bedrooms!);
-      if (filters.agentId) q = q.eq("agent_id", filters.agentId);
-      if (typeof filters.featured === "boolean") q = q.eq("featured", filters.featured);
-      if (filters.search) {
-        q = q.or(
-          `title.ilike.%${filters.search}%,city.ilike.%${filters.search}%,address.ilike.%${filters.search}%`
-        );
+      if (normalizedFilters.status && normalizedFilters.status !== "all") q = q.eq("status", normalizedFilters.status);
+      if (normalizedFilters.propertyType && normalizedFilters.propertyType !== "all")
+        q = q.eq("property_type", normalizedFilters.propertyType);
+      if (normalizedFilters.listingType && normalizedFilters.listingType !== "all")
+        q = q.eq("listing_type", normalizedFilters.listingType);
+      if (isNum(normalizedFilters.minPrice)) q = q.gte("price", normalizedFilters.minPrice);
+      if (isNum(normalizedFilters.maxPrice)) q = q.lte("price", normalizedFilters.maxPrice);
+      if (isNum(normalizedFilters.bedrooms)) q = q.gte("bedrooms", normalizedFilters.bedrooms);
+      if (normalizedFilters.agentId) q = q.eq("agent_id", normalizedFilters.agentId);
+      if (typeof normalizedFilters.featured === "boolean") q = q.eq("featured", normalizedFilters.featured);
+      if (normalizedFilters.search) {
+        const searchTerm = toPostgrestSearchTerm(normalizedFilters.search);
+        if (searchTerm) {
+          q = q.or(
+            [
+              "title",
+              "city",
+              "state",
+              "address",
+              "property_type",
+              "listing_type",
+            ].map((column) => `${column}.ilike.%${searchTerm}%`).join(",")
+          );
+        }
       }
       const { data, error } = await q;
       if (error) throw toAppError(error, "Could not load properties. Please try again.");
       return (data as Property[]) ?? [];
     },
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -136,7 +176,7 @@ export function useCreateProperty() {
       if (error) throw toAppError(error, "Could not create this property. Please check the details and try again.");
       return data as Property;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
+    onSuccess: (data) => invalidatePropertyCaches(qc, data ? [data.id] : []),
   });
 }
 
@@ -153,8 +193,7 @@ export function useUpdateProperty() {
       if (error) throw toAppError(error, "Could not update this property. Please try again.");
     },
     onSuccess: (_d, vars) => {
-      qc.invalidateQueries({ queryKey: ["properties"] });
-      qc.invalidateQueries({ queryKey: ["property", vars.id] });
+      invalidatePropertyCaches(qc, [vars.id]);
     },
   });
 }
@@ -171,7 +210,7 @@ export function useUpdatePropertyStatus() {
       const { error } = await supabase.from("properties").update({ status }).eq("id", id);
       if (error) throw toAppError(error, "Could not update this property status. Please try again.");
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
+    onSuccess: (_d, vars) => invalidatePropertyCaches(qc, [vars.id]),
   });
 }
 
@@ -187,7 +226,7 @@ export function useToggleFeatured() {
       const { error } = await supabase.from("properties").update({ featured }).eq("id", id);
       if (error) throw toAppError(error, "Could not update the featured status. Please try again.");
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
+    onSuccess: (_d, vars) => invalidatePropertyCaches(qc, [vars.id]),
   });
 }
 
@@ -203,7 +242,7 @@ export function useDeleteProperty() {
       const { error } = await supabase.from("properties").delete().eq("id", id);
       if (error) throw toAppError(error, "Could not delete this property. Please try again.");
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
+    onSuccess: (_d, id) => invalidatePropertyCaches(qc, [id]),
   });
 }
 
@@ -221,7 +260,7 @@ export function useBulkUpdatePropertyStatus() {
       const { error } = await supabase.from("properties").update({ status }).in("id", ids);
       if (error) throw toAppError(error, "Could not update the selected properties. Please try again.");
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
+    onSuccess: (_d, vars) => invalidatePropertyCaches(qc, vars.ids),
   });
 }
 
@@ -239,6 +278,6 @@ export function useBulkDeleteProperties() {
       const { error } = await supabase.from("properties").delete().in("id", ids);
       if (error) throw toAppError(error, "Could not delete the selected properties. Please try again.");
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
+    onSuccess: (_d, ids) => invalidatePropertyCaches(qc, ids),
   });
 }

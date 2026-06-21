@@ -6,10 +6,12 @@ export function PropertyCarousel({
   images,
   alt,
   className,
+  priority = false,
 }: {
   images: string[];
   alt: string;
   className?: string;
+  priority?: boolean;
 }) {
   const [idx, setIdx] = useState(0);
   const safe = images.length > 0 ? images : ["https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=1200"];
@@ -25,7 +27,9 @@ export function PropertyCarousel({
       <img
         src={safe[idx]}
         alt={alt}
-        loading="lazy"
+        loading={priority ? "eager" : "lazy"}
+        decoding="async"
+        fetchPriority={priority ? "high" : "auto"}
         className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
       />
       {safe.length > 1 && (

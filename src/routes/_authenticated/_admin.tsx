@@ -31,6 +31,11 @@ function AdminLayout() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const handleSignOut = async () => {
+    await signOut();
+    await navigate({ to: "/" });
+  };
+
   useEffect(() => {
     if (loading) return;
     if (role !== "admin") navigate({ to: "/dashboard" });
@@ -125,7 +130,7 @@ function AdminLayout() {
             variant="ghost"
             size="sm"
             className="w-full justify-start gap-3 rounded-xl px-3 py-2.5 h-auto text-sm text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-destructive"
-            onClick={async () => { await signOut(); navigate({ to: "/" }); }}
+            onClick={() => { void handleSignOut(); }}
           >
             <LogOut className="h-4 w-4" /> Sign out
           </Button>

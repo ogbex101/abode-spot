@@ -63,6 +63,11 @@ export function Navbar() {
   const initials = (user?.email ?? "U").slice(0, 2).toUpperCase();
 
   const close = () => setMobileOpen(false);
+  const handleSignOut = async () => {
+    close();
+    await signOut();
+    await navigate({ to: "/" });
+  };
 
   return (
     <header
@@ -174,7 +179,10 @@ export function Navbar() {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={async () => { await signOut(); navigate({ to: "/" }); }}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    void handleSignOut();
+                  }}
                   className="gap-2 cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="h-4 w-4" /> Sign out
@@ -275,7 +283,7 @@ export function Navbar() {
                     variant="ghost"
                     size="sm"
                     className="gap-2 text-destructive hover:text-destructive"
-                    onClick={async () => { close(); await signOut(); navigate({ to: "/" }); }}
+                    onClick={() => { void handleSignOut(); }}
                   >
                     <LogOut className="h-4 w-4" /> Sign out
                   </Button>

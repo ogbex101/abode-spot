@@ -8,7 +8,7 @@ import { formatPrice, truncate } from "@/lib/format";
 import { useSavedIds, useToggleSave } from "@/hooks/useFavorites";
 import { cn } from "@/lib/utils";
 
-export function PropertyCard({ property }: { property: Property }) {
+export function PropertyCard({ property, priority = false }: { property: Property; priority?: boolean }) {
   const { data: savedIds = [] } = useSavedIds();
   const toggle = useToggleSave();
   const saved = savedIds.includes(property.id);
@@ -21,6 +21,7 @@ export function PropertyCard({ property }: { property: Property }) {
           <PropertyCarousel
             images={property.images.slice(0, 3)}
             alt={property.title}
+            priority={priority}
             className="aspect-[4/3] transition-transform duration-500 group-hover:scale-[1.03]"
           />
 
