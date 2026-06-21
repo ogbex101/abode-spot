@@ -484,7 +484,18 @@ async function agentReply(browser, conversationId) {
 
 async function buyerReadsReply(browser, conversationId) {
   const { context, page } = await login(browser, ACCOUNTS.buyer, "/dashboard", "buyer-read-reply");
-  await page.goto(`${BASE_URL}/messages?conversation=${conversationId}`);
+  await page.goto(`${BASE_URL}/messages`);
+  await page.getByRole("heading", { name: "Messages" }).waitFor({ timeout: 15000 });
+  const replyRoom = page.getByRole("button", { name: new RegExp(TEST_REPLY, "i") });
+  await replyRoom.waitFor({ state: "visible", timeout: 15000 });
+  const bareMessagesComposerVisible = await page
+    .getByLabel(/^Message$/i)
+    .isVisible()
+    .catch(() => false);
+  check(!bareMessagesComposerVisible, "Bare /messages auto-opened a chat instead of showing rooms first");
+
+  await replyRoom.click();
+  await page.waitForURL((url) => url.pathname === "/messages" && url.searchParams.get("conversation") === conversationId, { timeout: 15000 });
   await page.locator("section").getByText(TEST_REPLY, { exact: true }).waitFor({ timeout: 15000 });
 
   await waitForDb("buyer reply read state", async () => {

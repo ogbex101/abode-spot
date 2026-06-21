@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Building2, Check, CheckCheck, Loader2, MessageSquare, Plus, Send, UserRound } from "lucide-react";
+import { ArrowLeft, Building2, Check, CheckCheck, Loader2, MessageSquare, Plus, Send, UserRound } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,8 @@ function MessagesPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
   const conversations = useConversations();
-  const selectedId = search.conversation ?? conversations.data?.[0]?.id ?? null;
+  const selectedId = search.conversation ?? null;
+  const hasSelectedConversation = Boolean(selectedId);
   const selectedFromList = conversations.data?.find((conversation) => conversation.id === selectedId) ?? null;
   const selectedQuery = useConversation(selectedFromList ? null : selectedId);
   const selectedConversation = selectedFromList ?? selectedQuery.data ?? null;
@@ -50,9 +51,16 @@ function MessagesPage() {
 
   if (!user) return null;
 
+  const openConversation = (conversationId: string) => {
+    navigate({ to: "/messages", search: { conversation: conversationId } });
+  };
+  const closeConversation = () => {
+    navigate({ to: "/messages", search: {} });
+  };
+
   return (
     <div className="min-h-screen bg-muted/20">
-      <div className="border-b bg-background">
+      <div className={cn("border-b bg-background", hasSelectedConversation && "hidden md:block")}>
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-5 md:px-6">
           <div>
             <h1 className="text-2xl font-bold">Messages</h1>
@@ -67,13 +75,25 @@ function MessagesPage() {
         </div>
       </div>
 
-      <main className="mx-auto grid max-w-7xl gap-4 px-4 py-6 md:grid-cols-[330px_1fr] md:px-6">
-        <aside className="rounded-lg border bg-card">
+      <main
+        className={cn(
+          "mx-auto grid",
+          hasSelectedConversation
+            ? "max-w-7xl md:grid-cols-[360px_minmax(0,1fr)] md:gap-4 md:px-6 md:py-6"
+            : "max-w-3xl px-4 py-6 md:px-6"
+        )}
+      >
+        <aside
+          className={cn(
+            "overflow-hidden border bg-card",
+            hasSelectedConversation ? "hidden md:block md:rounded-lg" : "rounded-lg"
+          )}
+        >
           <div className="flex items-center justify-between border-b px-4 py-3">
             <div className="font-semibold">Rooms</div>
             {totalUnread > 0 && <Badge variant="secondary">{totalUnread} unread</Badge>}
           </div>
-          <div className="max-h-[70vh] overflow-y-auto">
+          <div className={cn("overflow-y-auto", hasSelectedConversation ? "md:h-[74vh]" : "max-h-[calc(100vh-14rem)]")}>
             {conversations.isLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -89,26 +109,32 @@ function MessagesPage() {
                   key={conversation.id}
                   conversation={conversation}
                   selected={conversation.id === selectedId}
-                  onClick={() => navigate({ to: "/messages", search: { conversation: conversation.id } })}
+                  onClick={() => openConversation(conversation.id)}
                 />
               ))
             )}
           </div>
         </aside>
 
-        <section className="min-h-[70vh] rounded-lg border bg-card">
-          {selectedConversation ? (
-            <MessageThread conversation={selectedConversation} currentUserId={user.id} />
-          ) : (
-            <div className="flex min-h-[70vh] items-center justify-center p-8 text-center text-muted-foreground">
-              <div>
-                <MessageSquare className="mx-auto mb-4 h-12 w-12 opacity-30" />
-                <p className="font-medium">Select a room to start chatting</p>
-                <p className="mt-1 text-sm">Property contacts and agent chats will appear here.</p>
+        {hasSelectedConversation && (
+          <section className="min-h-[calc(100vh-4rem)] border bg-card md:min-h-[74vh] md:rounded-lg">
+            {selectedConversation ? (
+              <MessageThread conversation={selectedConversation} currentUserId={user.id} onBack={closeConversation} />
+            ) : selectedQuery.isLoading ? (
+              <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center md:min-h-[74vh]">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            </div>
-          )}
-        </section>
+            ) : (
+              <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-8 text-center text-muted-foreground md:min-h-[74vh]">
+                <div>
+                  <MessageSquare className="mx-auto mb-4 h-12 w-12 opacity-30" />
+                  <p className="font-medium">This room could not be opened</p>
+                  <Button variant="outline" className="mt-4" onClick={closeConversation}>Back to rooms</Button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
       </main>
 
       <NewAgentChatDialog open={agentDialogOpen} onOpenChange={setAgentDialogOpen} />
@@ -135,6 +161,7 @@ function ConversationButton({
     <button
       type="button"
       onClick={onClick}
+      aria-current={selected ? "true" : undefined}
       className={cn(
         "flex w-full gap-3 border-b px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-muted/50",
         selected && "bg-primary/8"
@@ -178,12 +205,15 @@ function ConversationButton({
 function MessageThread({
   conversation,
   currentUserId,
+  onBack,
 }: {
   conversation: Conversation;
   currentUserId: string;
+  onBack: () => void;
 }) {
   const { messages, isLoading, sendMessageAsync, isSending, markAsRead } = useMessages(conversation.id);
   const [message, setMessage] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const receiverId = conversation.other_user?.id;
   const otherName = displayName(conversation.other_user);
 
@@ -191,34 +221,43 @@ function MessageThread({
     markAsRead();
   }, [conversation.id, markAsRead]);
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length]);
+
   const handleSend = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!receiverId || !message.trim()) return;
+    const body = message.trim();
+    if (!receiverId || !body) return;
+    setMessage("");
     try {
       await sendMessageAsync({
         conversationId: conversation.id,
         receiverId,
-        message,
+        message: body,
       });
-      setMessage("");
     } catch (error) {
+      setMessage(body);
       toast.error(getErrorMessage(error, "Could not send this message. Please try again."));
     }
   };
 
   return (
-    <div className="flex min-h-[70vh] flex-col">
-      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+    <div className="flex h-[calc(100vh-4rem)] flex-col md:h-[74vh]">
+      <div className="flex items-center justify-between gap-3 border-b px-3 py-3 md:px-4">
         <div className="flex items-center gap-3">
+          <Button type="button" variant="ghost" size="icon" className="md:hidden" onClick={onBack} aria-label="Back to rooms">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
           <Avatar className="h-10 w-10">
             <AvatarFallback className="text-xs font-semibold">{getInitials(otherName)}</AvatarFallback>
           </Avatar>
           <div>
             <h2 className="font-semibold">{otherName}</h2>
-            {conversation.conversation_type === "property" ? (
+            {conversation.conversation_type === "property" && conversation.property_id ? (
               <Link
                 to="/property/$id"
-                params={{ id: conversation.property_id ?? "" }}
+                params={{ id: conversation.property_id }}
                 className="text-xs text-primary hover:underline"
               >
                 {conversation.property?.title ?? "Property chat"}
@@ -230,7 +269,7 @@ function MessageThread({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-5">
+      <div className="flex-1 overflow-y-auto px-3 py-5 md:px-4">
         {isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -262,28 +301,32 @@ function MessageThread({
                 </div>
               );
             })}
+            <div ref={messagesEndRef} />
           </div>
         )}
       </div>
 
-      <form className="border-t p-4" onSubmit={handleSend}>
-        <div className="space-y-2">
-          <Label htmlFor="message-body">Message</Label>
-          <div className="flex gap-2">
-            <Textarea
-              id="message-body"
-              rows={2}
-              value={message}
-              onChange={(event) => setMessage(event.target.value.slice(0, 1000))}
-              placeholder="Type your message..."
-              disabled={!receiverId || isSending}
-              className="min-h-12 resize-none"
-            />
-            <Button type="submit" disabled={!message.trim() || !receiverId || isSending} className="h-auto gap-2">
-              {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              Send message
-            </Button>
-          </div>
+      <form className="border-t bg-card p-3 md:p-4" onSubmit={handleSend}>
+        <div className="flex items-end gap-2">
+          <Label htmlFor="message-body" className="sr-only">Message</Label>
+          <Textarea
+            id="message-body"
+            rows={1}
+            value={message}
+            onChange={(event) => setMessage(event.target.value.slice(0, 1000))}
+            placeholder="Type your message..."
+            disabled={!receiverId || isSending}
+            className="max-h-32 min-h-12 resize-none rounded-2xl bg-muted/60 px-4 py-3 focus-visible:bg-background"
+          />
+          <Button
+            type="submit"
+            size="icon"
+            disabled={!message.trim() || !receiverId || isSending}
+            className="h-12 w-12 shrink-0 rounded-full"
+            aria-label="Send message"
+          >
+            {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
         </div>
       </form>
     </div>

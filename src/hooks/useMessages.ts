@@ -96,6 +96,43 @@ async function fetchConversation(conversationId: string, currentUserId: string) 
 
 export function useConversations() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!user || !supabase) return;
+
+    const invalidateConversations = () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations", user.id] });
+    };
+
+    const subscription = supabase
+      .channel(`conversation-list:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversations", filter: `participant_a_id=eq.${user.id}` },
+        invalidateConversations
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversations", filter: `participant_b_id=eq.${user.id}` },
+        invalidateConversations
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages", filter: `sender_id=eq.${user.id}` },
+        invalidateConversations
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages", filter: `receiver_id=eq.${user.id}` },
+        invalidateConversations
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [queryClient, user]);
 
   return useQuery({
     queryKey: ["conversations", user?.id],
@@ -136,6 +173,7 @@ export function useConversations() {
       ));
     },
     enabled: !!user,
+    staleTime: 30_000,
   });
 }
 
@@ -149,6 +187,7 @@ export function useConversation(conversationId: string | null) {
       return fetchConversation(conversationId, user.id);
     },
     enabled: !!conversationId && !!user,
+    staleTime: 30_000,
   });
 }
 
@@ -170,6 +209,7 @@ export function useAgentDirectory() {
       return (data ?? []) as ConversationParticipant[];
     },
     enabled: !!user && role === "agent",
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -252,6 +292,7 @@ export function useMessages(conversationId: string | null) {
       return data as Message[];
     },
     enabled: !!conversationId,
+    staleTime: 10_000,
   });
 
   const sendMessage = useMutation({
@@ -280,6 +321,38 @@ export function useMessages(conversationId: string | null) {
       });
 
       if (error) throw toAppError(error, "Could not send this message. Please try again.");
+    },
+    onMutate: async (variables) => {
+      if (!user) return undefined;
+      const body = variables.message.trim();
+      if (!body) return undefined;
+
+      await queryClient.cancelQueries({ queryKey: ["messages", variables.conversationId] });
+      const optimisticId = `optimistic-${Date.now()}`;
+      const optimisticMessage: Message = {
+        id: optimisticId,
+        conversation_id: variables.conversationId,
+        sender_id: user.id,
+        receiver_id: variables.receiverId,
+        message: body,
+        is_read: false,
+        read_at: null,
+        created_at: new Date().toISOString(),
+      };
+
+      queryClient.setQueryData(
+        ["messages", variables.conversationId],
+        (oldData: Message[] | undefined) => oldData ? [...oldData, optimisticMessage] : [optimisticMessage]
+      );
+
+      return { conversationId: variables.conversationId, optimisticId };
+    },
+    onError: (_error, _variables, context) => {
+      if (!context) return;
+      queryClient.setQueryData(
+        ["messages", context.conversationId],
+        (oldData: Message[] | undefined) => oldData?.filter((message) => message.id !== context.optimisticId) ?? []
+      );
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["messages", variables.conversationId] });
