@@ -344,9 +344,9 @@ async function createAgentProperty(browser) {
   await page.getByLabel(/Price/i).fill("85000000");
   await page.getByLabel(/Bedrooms/i).fill("3");
   await page.getByLabel(/Bathrooms/i).fill("2");
-  await page.getByLabel(/Area/i).fill("2400");
+  check(await page.getByLabel(/^Area$/i).count() === 0, "Agent Add Property should not render an Area field");
   await page.getByLabel(/Address/i).fill("12 E2E Test Avenue");
-  await page.getByLabel(/City/i).fill("Lagos");
+  check(await page.getByLabel(/^City$/i).count() === 0, "Agent Add Property should not render a City field");
   await page.getByLabel(/State/i).fill("Lagos");
   await page.getByLabel(/Description/i).fill("Created by the E2E smoke test.");
   await page.getByRole("button", { name: /Create Property|Submit Property/i }).click();
@@ -577,11 +577,15 @@ async function routeSmoke(browser) {
   await admin.context.close();
 
   const agent = await login(browser, ACCOUNTS.agent, "/agent", "agent-route-smoke");
-  for (const path of ["/agent", "/messages"]) {
+  for (const path of ["/agent", "/agent/add-property", "/messages"]) {
     await agent.page.goto(`${BASE_URL}${path}`);
     await agent.page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
     check(!agent.page.url().includes("/login"), `Agent route redirected unexpectedly: ${path}`);
   }
+  await agent.page.goto(`${BASE_URL}/agent/add-property`);
+  await agent.page.getByRole("heading", { name: /Add Property/i }).waitFor({ timeout: 15000 });
+  check(await agent.page.getByLabel(/^City$/i).count() === 0, "Direct /agent/add-property route should not render a City field");
+  check(await agent.page.getByLabel(/^Area$/i).count() === 0, "Direct /agent/add-property route should not render an Area field");
   await agent.context.close();
 }
 

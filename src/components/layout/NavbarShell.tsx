@@ -17,7 +17,7 @@ import { useSavedIds } from "@/hooks/useFavorites";
 import { cn } from "@/lib/utils";
 
 export function NavbarShell() {
-  const { user, role, signOut } = useAuth();
+  const { user, role, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const path = useRouterState({ select: (state) => state.location.pathname });
   const { data: savedIds = [] } = useSavedIds();
@@ -50,11 +50,15 @@ export function NavbarShell() {
   if (path.startsWith("/admin")) return null;
 
   const initials = (user?.email ?? "U").slice(0, 2).toUpperCase();
-  const addPropertyPath = role === "admin" ? "/admin/add-property" : "/agent/add-property";
+  const roleReady = !loading;
+  const isAdmin = roleReady && role === "admin";
+  const isAgent = roleReady && role === "agent";
+  const canListProperty = isAdmin || isAgent;
   const close = () => setMobileOpen(false);
   const goToAddProperty = () => {
     close();
-    void navigate({ to: addPropertyPath as never });
+    if (isAdmin) void navigate({ to: "/admin/add-property" });
+    else if (isAgent) void navigate({ to: "/agent/add-property" });
   };
   const handleSignOut = async () => {
     close();
@@ -73,12 +77,12 @@ export function NavbarShell() {
         <nav className="hidden items-center gap-1 md:flex">
           <NavLink to="/" label="Home" active={path === "/"} />
           <NavLink to="/properties" label="Properties" active={path === "/properties"} />
-          {role === "agent" && <NavLink to="/agent" label="Agent Portal" active={path.startsWith("/agent")} />}
+          {isAgent && <NavLink to="/agent" label="Agent Portal" active={path.startsWith("/agent")} />}
           {user && <NavLink to="/messages" label="Messages" active={path === "/messages"} />}
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
-          {(role === "agent" || role === "admin") && <Button variant="ghost" size="sm" onClick={goToAddProperty} className="gap-1.5 text-sm font-medium hover:bg-primary/8"><Plus className="h-3.5 w-3.5" /> List Property</Button>}
+          {canListProperty && <Button variant="ghost" size="sm" onClick={goToAddProperty} className="gap-1.5 text-sm font-medium hover:bg-primary/8"><Plus className="h-3.5 w-3.5" /> List Property</Button>}
           <Link to="/properties"><Button variant="ghost" size="icon" aria-label="Search properties"><Search className="h-4 w-4" /></Button></Link>
           <Link to="/dashboard" className="relative"><Button variant="ghost" size="icon" aria-label="Saved properties"><Heart className="h-4 w-4" /></Button>{savedIds.length > 0 && <Badge className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full px-1 text-[10px] font-bold">{savedIds.length}</Badge>}</Link>
           {user && <Link to="/messages"><Button variant="ghost" size="icon" aria-label="Messages"><MessageSquare className="h-4 w-4" /></Button></Link>}
@@ -86,10 +90,10 @@ export function NavbarShell() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="rounded-full ring-2 ring-transparent transition-all hover:ring-primary/30"><Avatar className="h-8 w-8"><AvatarFallback className="bg-primary text-xs font-bold text-primary-foreground">{initials}</AvatarFallback></Avatar></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56 rounded-xl border shadow-lg">
-                <DropdownMenuLabel className="py-2.5 font-normal"><div className="text-sm font-medium">{user.email}</div><div className="mt-0.5 text-xs capitalize text-muted-foreground">{role}</div></DropdownMenuLabel>
+                <DropdownMenuLabel className="py-2.5 font-normal"><div className="text-sm font-medium">{user.email}</div><div className="mt-0.5 text-xs capitalize text-muted-foreground">{roleReady ? role : "Loading..."}</div></DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {role === "admin" && <DropdownMenuItem onClick={() => void navigate({ to: "/admin/dashboard" })} className="cursor-pointer gap-2"><LayoutDashboard className="h-4 w-4" /> Admin Dashboard</DropdownMenuItem>}
-                {role === "agent" && <DropdownMenuItem onClick={() => void navigate({ to: "/agent" })} className="cursor-pointer gap-2"><Building2 className="h-4 w-4" /> Agent Portal</DropdownMenuItem>}
+                {isAdmin && <DropdownMenuItem onClick={() => void navigate({ to: "/admin/dashboard" })} className="cursor-pointer gap-2"><LayoutDashboard className="h-4 w-4" /> Admin Dashboard</DropdownMenuItem>}
+                {isAgent && <DropdownMenuItem onClick={() => void navigate({ to: "/agent" })} className="cursor-pointer gap-2"><Building2 className="h-4 w-4" /> Agent Portal</DropdownMenuItem>}
                 <DropdownMenuItem onClick={() => void navigate({ to: "/dashboard" })} className="cursor-pointer gap-2"><UserIcon className="h-4 w-4" /> My Dashboard</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => void navigate({ to: "/messages" })} className="cursor-pointer gap-2"><MessageSquare className="h-4 w-4" /> Messages</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => void navigate({ to: "/dashboard", search: { tab: "saved" } as never })} className="cursor-pointer gap-2"><Heart className="h-4 w-4" /> Saved Properties</DropdownMenuItem>
@@ -109,13 +113,13 @@ export function NavbarShell() {
         <nav className="mx-auto flex max-w-7xl flex-col gap-0.5 px-4 py-3 pb-6">
           <MobLink to="/" label="Home" icon={<Home className="h-4 w-4" />} active={path === "/"} onClick={close} />
           <MobLink to="/properties" label="Properties" icon={<Search className="h-4 w-4" />} active={path === "/properties"} onClick={close} />
-          {role === "agent" && <MobLink to="/agent" label="Agent Portal" icon={<Building2 className="h-4 w-4" />} active={path.startsWith("/agent")} onClick={close} />}
-          {role === "admin" && <MobLink to="/admin/dashboard" label="Admin Panel" icon={<LayoutDashboard className="h-4 w-4" />} active={path.startsWith("/admin")} onClick={close} />}
+          {isAgent && <MobLink to="/agent" label="Agent Portal" icon={<Building2 className="h-4 w-4" />} active={path.startsWith("/agent")} onClick={close} />}
+          {isAdmin && <MobLink to="/admin/dashboard" label="Admin Panel" icon={<LayoutDashboard className="h-4 w-4" />} active={path.startsWith("/admin")} onClick={close} />}
           {user && <MobLink to="/dashboard" label="My Dashboard" icon={<UserIcon className="h-4 w-4" />} active={path === "/dashboard"} onClick={close} />}
           {user && <MobLink to="/messages" label="Messages" icon={<MessageSquare className="h-4 w-4" />} active={path === "/messages"} onClick={close} />}
           {user && <MobLink to="/dashboard" label={`Saved${savedIds.length > 0 ? ` (${savedIds.length})` : ""}`} icon={<Heart className="h-4 w-4" />} active={false} onClick={close} search={{ tab: "saved" } as never} />}
           <div className="mt-4 border-t pt-4">
-            {!user ? <div className="flex gap-2"><Button className="flex-1" variant="outline" onClick={() => { close(); void navigate({ to: "/login" }); }}>Login</Button><Button className="flex-1" onClick={() => { close(); void navigate({ to: "/register" }); }}>Sign up</Button></div> : <div className="space-y-2"><>{(role === "agent" || role === "admin") && <Button className="w-full gap-2" variant="outline" onClick={goToAddProperty}><Plus className="h-4 w-4" /> List a Property</Button>}</><div className="flex items-center justify-between px-1 py-2"><div><div className="text-sm font-medium">{user.email}</div><div className="text-xs capitalize text-muted-foreground">{role}</div></div><Button variant="ghost" size="sm" className="gap-2 text-destructive hover:text-destructive" onClick={() => void handleSignOut()}><LogOut className="h-4 w-4" /> Sign out</Button></div></div>}
+            {!user ? <div className="flex gap-2"><Button className="flex-1" variant="outline" onClick={() => { close(); void navigate({ to: "/login" }); }}>Login</Button><Button className="flex-1" onClick={() => { close(); void navigate({ to: "/register" }); }}>Sign up</Button></div> : <div className="space-y-2"><>{canListProperty && <Button className="w-full gap-2" variant="outline" onClick={goToAddProperty}><Plus className="h-4 w-4" /> List a Property</Button>}</><div className="flex items-center justify-between px-1 py-2"><div><div className="text-sm font-medium">{user.email}</div><div className="text-xs capitalize text-muted-foreground">{roleReady ? role : "Loading..."}</div></div><Button variant="ghost" size="sm" className="gap-2 text-destructive hover:text-destructive" onClick={() => void handleSignOut()}><LogOut className="h-4 w-4" /> Sign out</Button></div></div>}
           </div>
         </nav>
       </div>

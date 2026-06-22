@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   Pencil,
@@ -26,12 +26,17 @@ export const Route = createFileRoute("/_authenticated/agent")({
 });
 
 function AgentHome() {
-  const { user, role } = useAuth();
+  const { role, loading } = useAuth();
   const navigate = useNavigate();
-  const removeProperty = useDeleteProperty();
-  const myProperties = useProperties({ agentId: user?.id, status: "all" });
-  const conversations = useConversations();
-  const [activeTab, setActiveTab] = useState("messages");
+  const path = useRouterState({ select: (state) => state.location.pathname });
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (role !== "agent" && role !== "admin") {
     return (
@@ -49,6 +54,18 @@ function AgentHome() {
     );
   }
 
+  if (path !== "/agent" && path !== "/agent/") return <Outlet />;
+
+  return <AgentDashboard />;
+}
+
+function AgentDashboard() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const removeProperty = useDeleteProperty();
+  const myProperties = useProperties({ agentId: user?.id, status: "all" });
+  const conversations = useConversations();
+  const [activeTab, setActiveTab] = useState("messages");
   const properties = myProperties.data ?? [];
   const approved = properties.filter((property) => property.status === "approved").length;
   const pending = properties.filter((property) => property.status === "pending").length;
@@ -72,7 +89,7 @@ function AgentHome() {
           <h1 className="text-3xl font-bold">Agent Dashboard</h1>
           <p className="text-muted-foreground">Manage your listings and reply from shared chat rooms.</p>
         </div>
-        <Button onClick={() => void navigate({ to: "/agent/add-property" as never })} className="gap-2">
+        <Button onClick={() => void navigate({ to: "/agent/add-property" })} className="gap-2">
           <Plus className="h-4 w-4" /> List a Property
         </Button>
       </div>
@@ -151,7 +168,7 @@ function AgentHome() {
                 <div className="py-20 text-center text-muted-foreground">
                   <Building2 className="mx-auto mb-4 h-12 w-12 opacity-30" />
                   <p className="font-medium">No listings yet.</p>
-                  <Button className="mt-4" onClick={() => void navigate({ to: "/agent/add-property" as never })}>
+                  <Button className="mt-4" onClick={() => void navigate({ to: "/agent/add-property" })}>
                     Add Your First Property
                   </Button>
                 </div>

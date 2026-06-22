@@ -24,6 +24,33 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const PROFILE_LOAD_TIMEOUT_MS = 8000;
+
+function fallbackProfile(authUser: User): AppUser {
+  return {
+    id: authUser.id,
+    email: authUser.email ?? "",
+    role: "user",
+    is_verified: Boolean(authUser.email_confirmed_at),
+    full_name: (authUser.user_metadata?.full_name as string | undefined) ?? null,
+    phone: null,
+    company_name: null,
+    avatar_url: null,
+    created_at: new Date().toISOString(),
+  };
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("Profile load timed out")), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -33,85 +60,108 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const queryClient = useQueryClient();
   const router = useRouter();
-  const profileLoadForUser = useRef<string | null>(null);
+  const activeSessionUserId = useRef<string | null>(null);
+  const profileLoadedForUser = useRef<string | null>(null);
+  const profileLoadForUser = useRef<{ userId: string; promise: Promise<void> } | null>(null);
 
   const clearAuthState = useCallback(async () => {
+    activeSessionUserId.current = null;
+    profileLoadedForUser.current = null;
     profileLoadForUser.current = null;
     setSession(null);
     setUser(null);
     setProfile(null);
     setRole("user");
+    setLoading(false);
     await queryClient.cancelQueries();
     queryClient.clear();
     await router.invalidate();
   }, [queryClient, router]);
 
   const loadProfileAndRole = useCallback(async (authUser: User) => {
-    if (!supabase) return;
-    try {
-      const { data: prof, error: profError } = await supabase
+    if (!supabase) {
+      setProfile(fallbackProfile(authUser));
+      setRole("user");
+      return;
+    }
+
+    const isCurrentUser = () => activeSessionUserId.current === authUser.id;
+    const { data: prof, error: profError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", authUser.id)
+      .maybeSingle();
+    if (profError) throw profError;
+    if (!isCurrentUser()) return;
+
+    let profileRow = prof as AppUser | null;
+    if (!profileRow) {
+      const { data: repairedProfile, error: repairError } = await supabase
         .from("users")
-        .select("*")
-        .eq("id", authUser.id)
-        .maybeSingle();
-      if (profError) throw profError;
-
-      let profileRow = prof as AppUser | null;
-      if (!profileRow) {
-        const { data: repairedProfile, error: repairError } = await supabase
-          .from("users")
-          .upsert({
-            id: authUser.id,
-            email: authUser.email ?? "",
-            full_name: (authUser.user_metadata?.full_name as string | undefined) ?? "",
-            role: "user",
-            is_verified: Boolean(authUser.email_confirmed_at),
-            agent_status: "not_applied",
-          }, { onConflict: "id" })
-          .select("*")
-          .single();
-        if (repairError) throw repairError;
-        profileRow = repairedProfile as AppUser;
-      }
-
-      setProfile(profileRow);
-
-      const { data: roles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", authUser.id);
-      if (rolesError) throw rolesError;
-
-      let roleList = (roles ?? []).map((item: { role: string }) => item.role);
-      if (roleList.length === 0) {
-        const { error: basicRoleError } = await supabase.from("user_roles").upsert({
-          user_id: authUser.id,
+        .upsert({
+          id: authUser.id,
+          email: authUser.email ?? "",
+          full_name: (authUser.user_metadata?.full_name as string | undefined) ?? "",
           role: "user",
-        }, { onConflict: "user_id,role", ignoreDuplicates: true });
-        if (basicRoleError) throw basicRoleError;
-        roleList = ["user"];
-      }
+          is_verified: Boolean(authUser.email_confirmed_at),
+          agent_status: "not_applied",
+        }, { onConflict: "id" })
+        .select("*")
+        .single();
+      if (repairError) throw repairError;
+      if (!isCurrentUser()) return;
+      profileRow = repairedProfile as AppUser;
+    }
 
-      let resolvedRole: AppRole = "user";
-      if (roleList.includes("admin")) resolvedRole = "admin";
-      else if (roleList.includes("agent")) resolvedRole = "agent";
-      else if (roleList.includes("pending_agent")) resolvedRole = "pending_agent";
-      setRole(resolvedRole);
+    setProfile(profileRow);
 
-      if (profileRow.role !== resolvedRole) {
-        void supabase.from("users").update({ role: resolvedRole }).eq("id", authUser.id);
-      }
-    } catch (error) {
-      console.error("Error loading profile:", error);
+    const { data: roles, error: rolesError } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", authUser.id);
+    if (rolesError) throw rolesError;
+    if (!isCurrentUser()) return;
+
+    let roleList = (roles ?? []).map((item: { role: string }) => item.role);
+    if (roleList.length === 0) {
+      const { error: basicRoleError } = await supabase.from("user_roles").upsert({
+        user_id: authUser.id,
+        role: "user",
+      }, { onConflict: "user_id,role", ignoreDuplicates: true });
+      if (basicRoleError) throw basicRoleError;
+      if (!isCurrentUser()) return;
+      roleList = ["user"];
+    }
+
+    let resolvedRole: AppRole = "user";
+    if (roleList.includes("admin")) resolvedRole = "admin";
+    else if (roleList.includes("agent")) resolvedRole = "agent";
+    else if (roleList.includes("pending_agent")) resolvedRole = "pending_agent";
+    setRole(resolvedRole);
+
+    if (profileRow.role !== resolvedRole && isCurrentUser()) {
+      void supabase.from("users").update({ role: resolvedRole }).eq("id", authUser.id);
     }
   }, []);
 
   const startProfileLoad = useCallback((authUser: User) => {
-    if (profileLoadForUser.current === authUser.id) return;
-    profileLoadForUser.current = authUser.id;
-    void loadProfileAndRole(authUser).finally(() => {
-      if (profileLoadForUser.current === authUser.id) profileLoadForUser.current = null;
-    });
+    if (profileLoadedForUser.current === authUser.id) return Promise.resolve();
+    if (profileLoadForUser.current?.userId === authUser.id) return profileLoadForUser.current.promise;
+
+    const promise = withTimeout(loadProfileAndRole(authUser), PROFILE_LOAD_TIMEOUT_MS)
+      .catch((error) => {
+        if (activeSessionUserId.current !== authUser.id) return;
+        console.error("Error loading profile:", error);
+        setProfile(fallbackProfile(authUser));
+        setRole("user");
+      })
+      .finally(() => {
+        if (activeSessionUserId.current === authUser.id) profileLoadedForUser.current = authUser.id;
+        if (profileLoadForUser.current?.userId === authUser.id) profileLoadForUser.current = null;
+      });
+
+    profileLoadForUser.current = { userId: authUser.id, promise };
+    return promise;
   }, [loadProfileAndRole]);
 
   useEffect(() => {
@@ -123,14 +173,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
     const applySession = (nextSession: Session | null) => {
       if (!mounted) return;
+      const nextUserId = nextSession?.user.id ?? null;
+      const isDifferentUser = activeSessionUserId.current !== nextUserId;
+      activeSessionUserId.current = nextUserId;
+      if (isDifferentUser) {
+        profileLoadedForUser.current = null;
+        profileLoadForUser.current = null;
+        setProfile(null);
+        setRole("user");
+      }
+
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
-      setLoading(false);
 
       if (nextSession?.user) {
-        startProfileLoad(nextSession.user);
-        queryClient.invalidateQueries();
-        void router.invalidate();
+        const profilePromise = startProfileLoad(nextSession.user);
+        setLoading(profileLoadedForUser.current !== nextSession.user.id);
+        void profilePromise.finally(() => {
+          if (!mounted || activeSessionUserId.current !== nextSession.user.id) return;
+          setLoading(false);
+          queryClient.invalidateQueries();
+          void router.invalidate();
+        });
       } else {
         void clearAuthState();
       }
@@ -233,8 +297,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = async () => {
     if (!user) return;
+    profileLoadedForUser.current = null;
     profileLoadForUser.current = null;
-    await loadProfileAndRole(user);
+    setLoading(true);
+    await startProfileLoad(user);
+    if (activeSessionUserId.current === user.id) setLoading(false);
   };
 
   const isVerified = useMemo(() => Boolean(user), [user]);
