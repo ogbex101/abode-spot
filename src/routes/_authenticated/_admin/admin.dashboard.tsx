@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Building2, Inbox, Users, Eye, Star, Clock, AlertCircle, TrendingUp, TrendingDown, ArrowRight, CheckCircle2, XCircle, UserCheck, UserX, Loader2, Mail, Phone, Briefcase } from "lucide-react";
+import { Building2, Inbox, Users, Eye, Star, AlertCircle, TrendingUp, TrendingDown, ArrowRight, CheckCircle2, XCircle, UserCheck, UserX, Loader2, Mail, Phone, Briefcase } from "lucide-react";
 import { useProperties } from "@/hooks/useProperties";
 import { useInquiries } from "@/hooks/useInquiries";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -30,7 +30,6 @@ function AdminDashboard() {
   const [rejectReason, setRejectReason] = useState("");
   
   const all = useProperties({ status: "all" });
-  const pending = useProperties({ status: "pending" });
   const featured = useProperties({ featured: true, status: "all" });
   const inquiries = useInquiries({ scope: "admin" });
   
@@ -160,9 +159,6 @@ function AdminDashboard() {
   const props = all.data ?? [];
   const totalViews = props.reduce((s, p) => s + (p.views ?? 0), 0);
   const unread = (inquiries.data ?? []).filter((i) => i.status === "unread").length;
-  const approved = props.filter((p) => p.status === "approved").length;
-  const rejected = props.filter((p) => p.status === "rejected").length;
-  const pendingCount = pending.data?.length ?? 0;
   const pendingAgents = applications?.length ?? 0;
 
   const byType = ["house", "apartment", "land", "commercial"].map((t) => ({
@@ -194,14 +190,6 @@ function AdminDashboard() {
           sub="All listings"
         />
         <StatCard
-          label="Pending Approval"
-          value={pendingCount}
-          icon={<Clock className="h-5 w-5" />}
-          color="bg-warning/15 text-warning-foreground"
-          sub="Awaiting review"
-          alert={pendingCount > 0}
-        />
-        <StatCard
           label="Pending Agents"
           value={pendingAgents}
           icon={<Users className="h-5 w-5" />}
@@ -226,13 +214,7 @@ function AdminDashboard() {
           sub="Need response"
           alert={unread > 0}
         />
-      </div>
-
-      {/* Secondary stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Featured" value={featured.data?.length ?? 0} icon={<Star className="h-5 w-5" />} color="bg-accent/15 text-accent-foreground" sub="Highlighted listings" />
-        <StatCard label="Approved" value={approved} icon={<CheckCircle2 className="h-5 w-5" />} color="bg-success/15 text-success" sub="Live listings" />
-        <StatCard label="Rejected" value={rejected} icon={<XCircle className="h-5 w-5" />} color="bg-destructive/10 text-destructive" sub="Declined listings" />
       </div>
 
       <Tabs defaultValue="overview" className="space-y-5">
@@ -428,7 +410,6 @@ function AdminDashboard() {
                       <p className="text-sm font-medium truncate">{p.title}</p>
                       <p className="text-xs text-muted-foreground">{p.city} · {formatDate(p.created_at)}</p>
                     </div>
-                    <StatusDot status={p.status} />
                   </div>
                 ))}
               </div>
@@ -532,21 +513,6 @@ function StatCard({
           </span>
         )}
       </div>
-    </div>
-  );
-}
-
-function StatusDot({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    approved: "bg-green-500",
-    pending: "bg-yellow-500",
-    rejected: "bg-red-500",
-    sold: "bg-gray-400",
-  };
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className={`h-2 w-2 rounded-full ${map[status] ?? "bg-gray-400"}`} />
-      <span className="text-xs text-muted-foreground capitalize">{status}</span>
     </div>
   );
 }

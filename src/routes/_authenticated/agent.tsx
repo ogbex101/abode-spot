@@ -9,6 +9,7 @@ import {
   Building2,
   Loader2,
   MessageSquare,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +17,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useDeleteProperty, useProperties } from "@/hooks/useProperties";
-import { useConversations, type Conversation } from "@/hooks/useMessages";
+import { useConversations } from "@/hooks/useMessages";
+import { ConversationListItem } from "@/components/messages/ConversationListItem";
 import { formatPrice } from "@/lib/format";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/errors";
@@ -38,7 +40,7 @@ function AgentHome() {
     );
   }
 
-  if (role !== "agent" && role !== "admin") {
+  if (role !== "agent" && role !== "admin" && role !== "pending_agent") {
     return (
       <div className="mx-auto max-w-2xl px-4 py-24 text-center">
         <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10">
@@ -60,15 +62,15 @@ function AgentHome() {
 }
 
 function AgentDashboard() {
-  const { user } = useAuth();
+  const { user, role, profile } = useAuth();
   const navigate = useNavigate();
   const removeProperty = useDeleteProperty();
   const myProperties = useProperties({ agentId: user?.id, status: "all" });
   const conversations = useConversations();
   const [activeTab, setActiveTab] = useState("messages");
+  const isPendingAgent = role === "pending_agent";
   const properties = myProperties.data ?? [];
-  const approved = properties.filter((property) => property.status === "approved").length;
-  const pending = properties.filter((property) => property.status === "pending").length;
+  const liveListings = properties.filter((property) => property.status !== "sold").length;
   const conversationItems = conversations.data ?? [];
   const unreadMessages = conversationItems.reduce((count, conversation) => count + conversation.unread_count, 0);
 
@@ -82,23 +84,51 @@ function AgentDashboard() {
     }
   };
 
+  const handleListProperty = () => {
+    if (isPendingAgent) {
+      toast.info("Your agent account is awaiting approval. You can list properties after an admin approves you.");
+      return;
+    }
+    void navigate({ to: "/agent/add-property" });
+  };
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-10">
+      {isPendingAgent && (
+        <div className="mb-8 rounded-2xl border border-warning/40 bg-warning/10 p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-warning/20 text-warning-foreground">
+              <Lock className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold">Your agent account is awaiting admin approval</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                You can view your Agent Portal while we review {profile?.company_name || "your profile"}. Listing properties and agent chat features unlock once an admin approves your application.
+              </p>
+              <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                <div className="flex items-center gap-2"><Lock className="h-3.5 w-3.5" /> Property posting is locked</div>
+                <div className="flex items-center gap-2"><Lock className="h-3.5 w-3.5" /> Chat creation and replies are locked</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Agent Dashboard</h1>
           <p className="text-muted-foreground">Manage your listings and reply from shared chat rooms.</p>
         </div>
-        <Button onClick={() => void navigate({ to: "/agent/add-property" })} className="gap-2">
-          <Plus className="h-4 w-4" /> List a Property
+        <Button onClick={handleListProperty} className="gap-2" variant={isPendingAgent ? "outline" : "default"}>
+          {isPendingAgent ? <Lock className="h-4 w-4" /> : <Plus className="h-4 w-4" />} List a Property
         </Button>
       </div>
 
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
           { label: "Total listings", value: properties.length, icon: <Building2 className="h-4 w-4" />, color: "bg-primary/10 text-primary" },
-          { label: "Live listings", value: approved, icon: <Eye className="h-4 w-4" />, color: "bg-success/10 text-success" },
-          { label: "Pending", value: pending, icon: <Plus className="h-4 w-4" />, color: "bg-warning/10 text-warning-foreground" },
+          { label: "Live listings", value: liveListings, icon: <Eye className="h-4 w-4" />, color: "bg-success/10 text-success" },
+          { label: "Chat rooms", value: conversationItems.length, icon: <MessageSquare className="h-4 w-4" />, color: "bg-accent/15 text-accent-foreground" },
           { label: "Unread messages", value: unreadMessages, icon: <Inbox className="h-4 w-4" />, color: "bg-destructive/10 text-destructive" },
         ].map((stat) => (
           <div key={stat.label} className="rounded-2xl border bg-card p-4">
@@ -129,7 +159,13 @@ function AgentDashboard() {
               <CardDescription>Reply to buyers and other agents in the shared messages screen.</CardDescription>
             </CardHeader>
             <CardContent>
-              {conversations.isLoading ? (
+              {isPendingAgent ? (
+                <div className="py-16 text-center text-muted-foreground">
+                  <Lock className="mx-auto mb-4 h-10 w-10 opacity-40" />
+                  <p className="font-medium">Chat rooms unlock after approval</p>
+                  <p className="mx-auto mt-1 max-w-md text-sm">You cannot start, send, or reply to chats until an admin approves your agent account.</p>
+                </div>
+              ) : conversations.isLoading ? (
                 <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin" /></div>
               ) : conversationItems.length === 0 ? (
                 <div className="py-20 text-center text-muted-foreground">
@@ -143,7 +179,7 @@ function AgentDashboard() {
               ) : (
                 <div className="space-y-4">
                   {conversationItems.map((conversation) => (
-                    <AgentConversationCard
+                    <ConversationListItem
                       key={conversation.id}
                       conversation={conversation}
                       onOpen={() => void navigate({ to: "/messages", search: { conversation: conversation.id } })}
@@ -168,7 +204,8 @@ function AgentDashboard() {
                 <div className="py-20 text-center text-muted-foreground">
                   <Building2 className="mx-auto mb-4 h-12 w-12 opacity-30" />
                   <p className="font-medium">No listings yet.</p>
-                  <Button className="mt-4" onClick={() => void navigate({ to: "/agent/add-property" })}>
+                  <Button className="mt-4 gap-2" variant={isPendingAgent ? "outline" : "default"} onClick={handleListProperty}>
+                    {isPendingAgent && <Lock className="h-4 w-4" />}
                     Add Your First Property
                   </Button>
                 </div>
@@ -180,7 +217,6 @@ function AgentDashboard() {
                         <th className="px-4 py-3">Property</th>
                         <th className="px-4 py-3">Price</th>
                         <th className="hidden px-4 py-3 md:table-cell">Type</th>
-                        <th className="px-4 py-3">Status</th>
                         <th className="px-4 py-3 text-right">Actions</th>
                       </tr>
                     </thead>
@@ -204,9 +240,6 @@ function AgentDashboard() {
                             </td>
                             <td className="px-4 py-3">{formatPrice(property.price, property.listing_type)}</td>
                             <td className="hidden px-4 py-3 capitalize md:table-cell">{property.property_type}</td>
-                            <td className="px-4 py-3">
-                              <Badge className={property.status === "approved" ? "bg-success/15 text-success" : "bg-warning/15"}>{property.status}</Badge>
-                            </td>
                             <td className="px-4 py-3 text-right">
                               <div className="flex justify-end gap-1">
                                 <Link to="/agent/edit/$id" params={{ id: property.id }}>
@@ -228,45 +261,6 @@ function AgentDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
-  );
-}
-
-function AgentConversationCard({ conversation, onOpen }: { conversation: Conversation; onOpen: () => void }) {
-  const property = conversation.property;
-  const otherUser = conversation.other_user;
-
-  return (
-    <div className="rounded-lg border bg-card p-4 transition-all hover:bg-muted/30">
-      <div className="flex flex-wrap gap-4">
-        {property?.images?.[0] && (
-          <img src={property.images[0]} alt="" className="h-20 w-24 shrink-0 rounded-lg object-cover" />
-        )}
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="font-semibold">{otherUser?.full_name || otherUser?.email || "Chat room"}</p>
-              {property?.title && (
-                <Link to="/property/$id" params={{ id: property.id }} className="text-xs text-primary hover:underline">
-                  {property.title}
-                </Link>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {conversation.unread_count > 0 && <Badge>{conversation.unread_count} unread</Badge>}
-              <Badge variant="outline">{conversation.conversation_type === "property" ? "Property" : "Direct"}</Badge>
-            </div>
-          </div>
-          <p className="rounded-lg bg-muted/30 p-3 text-sm text-muted-foreground">
-            {conversation.last_message || "No messages yet"}
-          </p>
-        </div>
-        <div className="flex flex-col justify-center gap-2">
-          <Button size="sm" onClick={onOpen} className="gap-2">
-            <MessageSquare className="h-3.5 w-3.5" /> Open Chat
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

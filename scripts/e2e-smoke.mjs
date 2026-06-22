@@ -7,12 +7,15 @@ const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:5173";
 const PROJECT_REF = process.env.E2E_SUPABASE_PROJECT_REF ?? "yxgxdxxudrgiilggavtc";
 const CHROME = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ?? "/usr/bin/google-chrome";
 const PASSWORD = process.env.E2E_PASSWORD ?? "AbodeSpotTest#2026";
+const RUN_ID = process.env.E2E_RUN_ID ?? Date.now().toString(36);
+const TEST_EMAIL_DOMAIN = "abodespot.test";
+const testEmail = (name) => `${name}+${RUN_ID}@${TEST_EMAIL_DOMAIN}`;
 
 const ACCOUNTS = {
-  admin: "admin@abodespot.test",
-  buyer: "buyer@abodespot.test",
-  agent: "agent@abodespot.test",
-  agent2: "agent2@abodespot.test",
+  admin: testEmail("admin"),
+  buyer: testEmail("buyer"),
+  agent: testEmail("agent"),
+  agent2: testEmail("agent2"),
 };
 
 const TEST_PROPERTY_TITLE = "E2E Agent Listing";
@@ -20,6 +23,7 @@ const TEST_REPLY = "E2E reply: viewing is available this week.";
 const TEST_INQUIRY = "E2E message: I am interested in this property.";
 const TEST_AGENT_DIRECT = "E2E direct: can you co-broker this listing?";
 const TEST_AGENT_DIRECT_REPLY = "E2E direct reply: yes, send the brief.";
+const AUTH_FLOW_TIMEOUT = 45_000;
 
 const failures = [];
 const pageProblems = [];
@@ -93,12 +97,10 @@ async function resetTestData() {
     "delete E2E properties"
   );
 
-  for (const email of Object.values(ACCOUNTS)) {
-    const user = await authUserByEmail(email);
-    if (user) {
+  const testUsers = (await listAuthUsers()).filter((user) => user.email?.toLowerCase().endsWith(`@${TEST_EMAIL_DOMAIN}`));
+  for (const user of testUsers) {
       const { error } = await service.auth.admin.deleteUser(user.id);
-      if (error) throw new Error(`delete ${email}: ${error.message}`);
-    }
+      if (error) throw new Error(`delete ${user.email}: ${error.message}`);
   }
 
   await requireOk(
@@ -205,6 +207,25 @@ async function waitForDb(label, fn, timeout = 20000) {
   throw new Error(`Timed out waiting for ${label}`);
 }
 
+async function waitForPath(page, expectedPath, timeout = AUTH_FLOW_TIMEOUT) {
+  await page.waitForFunction(
+    (path) => window.location.pathname === path,
+    expectedPath,
+    { timeout }
+  );
+}
+
+async function waitForConversationPath(page, conversationId, timeout = 15000) {
+  await page.waitForFunction(
+    (id) => {
+      const url = new URL(window.location.href);
+      return url.pathname === "/messages" && url.searchParams.get("conversation") === id;
+    },
+    conversationId,
+    { timeout }
+  );
+}
+
 async function newPage(browser, label) {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 900 },
@@ -239,8 +260,8 @@ async function registerBuyer(browser) {
   await page.getByLabel(/^Email$/i).fill(ACCOUNTS.buyer);
   await page.getByLabel(/^Password$/i).fill(PASSWORD);
   await page.getByRole("button", { name: /Create account/i }).click();
-  await page.waitForURL((url) => url.pathname === "/dashboard", { timeout: 25000 });
-  await page.getByText(/Welcome back,/i).waitFor({ timeout: 15000 });
+  await waitForPath(page, "/dashboard");
+  await page.getByText(/Welcome back,/i).waitFor({ timeout: AUTH_FLOW_TIMEOUT });
 
   const user = await waitForDb("buyer profile", () => dbUser(ACCOUNTS.buyer));
   const roles = await dbRoles(user.id);
@@ -258,17 +279,19 @@ async function registerAgent(browser) {
   await page.getByLabel(/^Email$/i).fill(ACCOUNTS.agent);
   await page.getByLabel(/^Password$/i).fill(PASSWORD);
   await page.getByRole("button", { name: /Create account/i }).click();
-  await page.getByRole("heading", { name: /Tell us about yourself/i }).waitFor({ timeout: 25000 });
+  await page.getByRole("heading", { name: /Tell us about yourself/i }).waitFor({ timeout: AUTH_FLOW_TIMEOUT });
   await page.getByLabel(/Phone number/i).fill("+234 800 000 0000");
   await page.getByLabel(/Company \/ Agency name/i).fill("E2E Realty");
   await page.getByLabel(/License number/i).fill("E2E-12345");
   await page.getByLabel(/Additional information/i).fill("E2E agent application.");
   await page.getByRole("button", { name: /Submit Application/i }).click();
-  await page.waitForURL((url) => url.pathname === "/dashboard", { timeout: 25000 });
+  await waitForPath(page, "/agent");
+  await page.getByText(/awaiting admin approval/i).waitFor({ timeout: AUTH_FLOW_TIMEOUT });
 
   const user = await waitForDb("agent profile", () => dbUser(ACCOUNTS.agent));
   const roles = await dbRoles(user.id);
   check(roles.includes("pending_agent"), "Agent signup did not create pending_agent role before approval");
+  check(user.role === "pending_agent", `Pending agent profile role should be pending_agent, got ${user.role}`);
 
   const { data: apps, error } = await service
     .from("agent_applications")
@@ -277,28 +300,40 @@ async function registerAgent(browser) {
     .eq("status", "pending");
   if (error) throw new Error(`agent application query: ${error.message}`);
   check(apps.length === 1, `Agent signup should create exactly one pending application, found ${apps.length}`);
+  check(await page.getByRole("heading", { name: /List your property on AbodeSpot/i }).count() === 0, "Pending agent saw the generic agent signup page");
+
+  await page.getByRole("button", { name: /List a Property/i }).click();
+  await page.getByText(/awaiting approval.*list properties/i).waitFor({ timeout: 5000 });
+  check(new URL(page.url()).pathname === "/agent", "Pending agent List a Property action navigated away from /agent");
+
+  await page.goto(`${BASE_URL}/agent/add-property`);
+  await page.getByText(/awaiting admin approval/i).waitFor({ timeout: 15000 });
+  check(await page.getByRole("heading", { name: /^Add Property$/i }).count() === 0, "Pending agent direct add-property URL rendered the property form");
+
+  await page.goto(`${BASE_URL}/messages`);
+  check(await page.getByRole("button", { name: /New agent chat/i }).count() === 0, "Pending agent can start a new agent chat");
   await context.close();
 }
 
-async function login(browser, email, expectedPath, label) {
-  const { context, page } = await newPage(browser, label);
-  await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded" });
-  await page.getByLabel(/^Email$/i).fill(email);
-  await page.getByLabel(/^Password$/i).fill(PASSWORD);
-  await page.getByRole("button", { name: /Sign in/i }).click();
-  await page.waitForURL((url) => url.pathname === expectedPath, { timeout: 25000 });
-  return { context, page };
-}
-
-async function approveAgent(browser) {
+async function approveAgentWithRealtime(browser) {
   const agent = await dbUser(ACCOUNTS.agent);
-  const { context, page } = await login(browser, ACCOUNTS.admin, "/admin/dashboard", "admin-approve-agent");
-  await page.getByRole("tab", { name: /Agent Applications/i }).click();
-  const firstApprove = page.getByRole("button", { name: /Approve Agent/i }).first();
+  const pending = await login(browser, ACCOUNTS.agent, "/agent", "pending-agent-realtime");
+  await pending.page.getByText(/awaiting admin approval/i).waitFor({ timeout: AUTH_FLOW_TIMEOUT });
+
+  const toastMessages = [];
+  pending.page.on("console", (msg) => {
+    if (msg.type() === "error" && !/Failed to load resource/i.test(msg.text())) {
+      pageProblems.push(`pending-agent-realtime: console error: ${msg.text()}`);
+    }
+  });
+
+  const admin = await login(browser, ACCOUNTS.admin, "/admin/dashboard", "admin-approve-agent");
+  await admin.page.getByRole("tab", { name: /Agent Applications/i }).click();
+  const firstApprove = admin.page.getByRole("button", { name: /Approve Agent/i }).first();
   const hasApproveButton = await firstApprove.waitFor({ state: "visible", timeout: 15000 }).then(() => true).catch(() => false);
   check(hasApproveButton, "Admin dashboard did not render an Approve Agent button for the pending test agent");
   const approveButtons = hasApproveButton
-    ? await page.getByRole("button", { name: /Approve Agent/i }).count()
+    ? await admin.page.getByRole("button", { name: /Approve Agent/i }).count()
     : 0;
   check(approveButtons === 1, `Admin should see one pending approval button for test agent, found ${approveButtons}`);
   if (hasApproveButton) await firstApprove.click();
@@ -323,7 +358,27 @@ async function approveAgent(browser) {
   const refreshed = approvedState.profile;
   check(refreshed.role === "agent", `Approved agent profile role should be agent, got ${refreshed.role}`);
   check(refreshed.agent_status === "approved", `Approved agent status should be approved, got ${refreshed.agent_status}`);
-  await context.close();
+
+  const approvalToast = pending.page.getByText(/Your agent account has been approved.*list properties and chat with clients/i);
+  await approvalToast.waitFor({ state: "visible", timeout: 20000 });
+  toastMessages.push(await approvalToast.count());
+  check(toastMessages[0] === 1, `Expected exactly one approval toast, found ${toastMessages[0]}`);
+  await pending.page.getByText(/awaiting admin approval/i).waitFor({ state: "hidden", timeout: 15000 });
+  await pending.page.getByRole("button", { name: /List a Property/i }).click();
+  await waitForPath(pending.page, "/agent/add-property", 15000);
+
+  await admin.context.close();
+  await pending.context.close();
+}
+
+async function login(browser, email, expectedPath, label) {
+  const { context, page } = await newPage(browser, label);
+  await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded" });
+  await page.getByLabel(/^Email$/i).fill(email);
+  await page.getByLabel(/^Password$/i).fill(PASSWORD);
+  await page.getByRole("button", { name: /Sign in/i }).click();
+  await waitForPath(page, expectedPath);
+  return { context, page };
 }
 
 async function createAgentProperty(browser) {
@@ -360,26 +415,24 @@ async function createAgentProperty(browser) {
     if (error) throw new Error(error.message);
     return data;
   });
-  check(property.status === "pending", `Agent-created property should start pending, got ${property.status}`);
+  check(property.status === "approved", `Agent-created property should be live immediately, got ${property.status}`);
+
+  await page.goto(`${BASE_URL}/properties`);
+  await page.getByPlaceholder(/Search by city, title, address/i).fill(TEST_PROPERTY_TITLE);
+  await page.getByText(TEST_PROPERTY_TITLE).waitFor({ timeout: 15000 });
+  check(await page.getByText(/submitted for approval|pending approval|awaiting review/i).count() === 0, "Agent property flow still shows approval wording");
   await context.close();
   return property;
 }
 
-async function approvePropertyInAdmin(browser, propertyId) {
-  const { context, page } = await login(browser, ACCOUNTS.admin, "/admin/dashboard", "admin-approve-property");
+async function assertAdminHasNoPropertyApprovalControls(browser) {
+  const { context, page } = await login(browser, ACCOUNTS.admin, "/admin/dashboard", "admin-property-no-approval");
   await page.goto(`${BASE_URL}/admin/properties`);
   await page.getByPlaceholder(/Search title\/city/i).fill(TEST_PROPERTY_TITLE);
   await page.getByText(TEST_PROPERTY_TITLE).waitFor({ timeout: 15000 });
-  const approve = page.getByRole("button", { name: new RegExp(`Approve ${TEST_PROPERTY_TITLE}`, "i") });
-  const hasNamedApprove = await approve.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
-  check(hasNamedApprove, "Admin property approve icon button is missing an accessible label");
-  if (hasNamedApprove) await approve.click();
-
-  await waitForDb("property approval", async () => {
-    const { data, error } = await service.from("properties").select("status").eq("id", propertyId).maybeSingle();
-    if (error) throw new Error(error.message);
-    return data?.status === "approved";
-  });
+  check(await page.getByRole("button", { name: new RegExp(`Approve ${TEST_PROPERTY_TITLE}`, "i") }).count() === 0, "Admin properties still exposes approve property control");
+  check(await page.getByRole("button", { name: new RegExp(`Reject ${TEST_PROPERTY_TITLE}`, "i") }).count() === 0, "Admin properties still exposes reject property control");
+  check(await page.getByText(/pending approval|awaiting review/i).count() === 0, "Admin properties still shows property approval wording");
   await context.close();
 }
 
@@ -423,7 +476,7 @@ async function buyerConversation(browser, propertyId) {
 
   await page.getByLabel(/^Message$/i).fill(TEST_INQUIRY);
   await page.getByRole("button", { name: /Send message/i }).click();
-  await page.waitForURL((url) => url.pathname === "/messages", { timeout: 25000 });
+  await waitForPath(page, "/messages");
 
   const buyer = await dbUser(ACCOUNTS.buyer);
   const agent = await dbUser(ACCOUNTS.agent);
@@ -495,7 +548,7 @@ async function buyerReadsReply(browser, conversationId) {
   check(!bareMessagesComposerVisible, "Bare /messages auto-opened a chat instead of showing rooms first");
 
   await replyRoom.click();
-  await page.waitForURL((url) => url.pathname === "/messages" && url.searchParams.get("conversation") === conversationId, { timeout: 15000 });
+  await waitForConversationPath(page, conversationId);
   await page.locator("section").getByText(TEST_REPLY, { exact: true }).waitFor({ timeout: 15000 });
 
   await waitForDb("buyer reply read state", async () => {
@@ -535,7 +588,7 @@ async function agentDirectChat(browser) {
   await starter.page.getByRole("button", { name: /Chat with E2E Agent Two/i }).click();
   await starter.page.getByLabel(/Initial message/i).fill(TEST_AGENT_DIRECT);
   await starter.page.getByRole("button", { name: /Start chat/i }).click();
-  await starter.page.waitForURL((url) => url.pathname === "/messages", { timeout: 25000 });
+  await waitForPath(starter.page, "/messages");
 
   const conversation = await waitForDb("agent-agent direct conversation", () => (
     findConversation({
@@ -565,6 +618,45 @@ async function agentDirectChat(browser) {
   check(finalMessages[1]?.sender_id === agent2.id && finalMessages[1]?.receiver_id === agent.id, "Direct agent reply has the wrong direction");
   check(finalMessages.every((row) => row.sender_id !== row.receiver_id), "Direct agent room contains a self-addressed message");
   await responder.context.close();
+  return conversation;
+}
+
+async function assertNoHorizontalOverflow(page, label) {
+  const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  check(!hasOverflow, `${label} has horizontal overflow on mobile`);
+}
+
+async function conversationCardSmoke(browser, propertyConversationId, directConversationId) {
+  const buyer = await login(browser, ACCOUNTS.buyer, "/dashboard", "buyer-dashboard-chat-cards");
+  await buyer.page.goto(`${BASE_URL}/dashboard`);
+  await buyer.page.getByText(/Recent Messages/i).waitFor({ timeout: 15000 });
+  check(await buyer.page.getByRole("button", { name: /Open Chat/i }).count() === 0, "Buyer dashboard recent messages still shows Open Chat button");
+  await buyer.page.getByRole("button", { name: /Open chat with E2E Agent/i }).first().click();
+  await waitForConversationPath(buyer.page, propertyConversationId);
+
+  await buyer.page.goto(`${BASE_URL}/dashboard?tab=messages`);
+  await buyer.page.getByText(/My Messages/i).waitFor({ timeout: 15000 });
+  check(await buyer.page.getByRole("button", { name: /Open Chat/i }).count() === 0, "Buyer dashboard messages tab still shows Open Chat button");
+  await buyer.page.setViewportSize({ width: 390, height: 844 });
+  await buyer.page.reload({ waitUntil: "domcontentloaded" });
+  await buyer.page.getByText(/My Messages/i).waitFor({ timeout: 15000 });
+  await assertNoHorizontalOverflow(buyer.page, "Buyer dashboard messages");
+  await buyer.context.close();
+
+  const agent = await login(browser, ACCOUNTS.agent, "/agent", "agent-dashboard-chat-cards");
+  await agent.page.getByRole("button", { name: /Open chat with E2E Buyer/i }).waitFor({ timeout: 15000 });
+  check(await agent.page.getByRole("button", { name: /Open Chat/i }).count() === 0, "Agent portal chat rooms still shows Open Chat button");
+  await agent.page.getByRole("button", { name: /Open chat with E2E Buyer/i }).click();
+  await waitForConversationPath(agent.page, propertyConversationId);
+
+  await agent.page.goto(`${BASE_URL}/agent`);
+  await agent.page.setViewportSize({ width: 390, height: 844 });
+  await agent.page.reload({ waitUntil: "domcontentloaded" });
+  await agent.page.getByRole("button", { name: /Open chat with E2E Buyer/i }).waitFor({ timeout: 15000 });
+  await assertNoHorizontalOverflow(agent.page, "Agent portal chat rooms");
+  await agent.context.close();
+
+  check(Boolean(directConversationId), "Direct conversation was not created for chat-card smoke coverage");
 }
 
 async function routeSmoke(browser) {
@@ -628,20 +720,26 @@ async function main() {
   try {
     await registerBuyer(browser);
     await registerAgent(browser);
-    await approveAgent(browser);
+    await approveAgentWithRealtime(browser);
     await createApprovedAgent(ACCOUNTS.agent2, "E2E Agent Two");
     const property = await createAgentProperty(browser);
     if (property?.id) {
-      await approvePropertyInAdmin(browser, property.id);
+      await assertAdminHasNoPropertyApprovalControls(browser);
       const conversation = await buyerConversation(browser, property.id);
       await agentReply(browser, conversation.id);
       await buyerReadsReply(browser, conversation.id);
-      await agentDirectChat(browser);
+      const directConversation = await agentDirectChat(browser);
+      await conversationCardSmoke(browser, conversation.id, directConversation.id);
     }
     await routeSmoke(browser);
     await logoutSmoke(browser);
   } finally {
     await browser.close();
+    try {
+      await resetTestData();
+    } catch (error) {
+      failures.push(`cleanup failed: ${error.message}`);
+    }
   }
 
   failures.push(...pageProblems);
@@ -652,11 +750,7 @@ async function main() {
   }
 
   console.log("\nSmoke test passed.");
-  console.log(`Admin: ${ACCOUNTS.admin}`);
-  console.log(`Buyer: ${ACCOUNTS.buyer}`);
-  console.log(`Agent: ${ACCOUNTS.agent}`);
-  console.log(`Agent 2: ${ACCOUNTS.agent2}`);
-  console.log(`Password: ${PASSWORD}`);
+  console.log("E2E test accounts and listings were cleaned up.");
 }
 
 main().catch((error) => {

@@ -1,6 +1,6 @@
 import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Bed, Bath, Square, MapPin, Heart, Share2, Phone, Mail } from "lucide-react";
+import { Bed, Bath, Square, MapPin, Heart, Share2, Phone, Mail, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProperty, useProperties } from "@/hooks/useProperties";
 import { useSavedIds, useToggleSave } from "@/hooks/useFavorites";
-import { useCreateConversation } from "@/hooks/useMessages";
+import { PENDING_AGENT_CHAT_MESSAGE, useCreateConversation } from "@/hooks/useMessages";
 import { useAuth } from "@/hooks/useAuth";
 import { formatPrice } from "@/lib/format";
 import { PROPERTY_FEATURES } from "@/lib/constants";
@@ -188,10 +188,11 @@ function KV({ icon, label, value }: { icon: React.ReactNode; label: string; valu
 }
 
 function AgentSidebar({ propertyId, agent }: { propertyId: string; agent?: import("@/lib/types").AppUser | null }) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const navigate = useNavigate();
   const create = useCreateConversation();
   const [message, setMessage] = useState("");
+  const isPendingAgent = role === "pending_agent";
 
   return (
     <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
@@ -225,6 +226,10 @@ function AgentSidebar({ propertyId, agent }: { propertyId: string; agent?: impor
           e.preventDefault();
           if (!user) {
             toast.error("Please sign in to send an inquiry");
+            return;
+          }
+          if (isPendingAgent) {
+            toast.info(PENDING_AGENT_CHAT_MESSAGE);
             return;
           }
           if (!agent?.id) {
@@ -263,6 +268,12 @@ function AgentSidebar({ propertyId, agent }: { propertyId: string; agent?: impor
             <Link to="/login" className="text-primary hover:underline">Sign in</Link> to contact this agent.
           </p>
         )}
+        {isPendingAgent && (
+          <p className="flex items-start gap-2 text-xs text-muted-foreground">
+            <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{PENDING_AGENT_CHAT_MESSAGE}</span>
+          </p>
+        )}
         <div className="space-y-2">
           <Label htmlFor="msg">Message</Label>
           <Textarea
@@ -270,12 +281,12 @@ function AgentSidebar({ propertyId, agent }: { propertyId: string; agent?: impor
             rows={4}
             value={message}
             onChange={(e) => setMessage(e.target.value.slice(0, 1000))}
-            placeholder="I'm interested in this property…"
-            disabled={!user}
+            placeholder={isPendingAgent ? "Messaging unlocks after approval" : "I'm interested in this property…"}
+            disabled={!user || isPendingAgent}
           />
         </div>
         <Button type="submit" className="w-full" disabled={!user || create.isPending}>
-          {create.isPending ? "Sending…" : "Send message"}
+          {create.isPending ? "Sending…" : isPendingAgent ? "Chat locked" : "Send message"}
         </Button>
       </form>
     </aside>

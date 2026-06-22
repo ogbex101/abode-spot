@@ -1,24 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Check, X, Star, Trash2, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { Star, Trash2, Eye, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   useProperties,
-  useUpdatePropertyStatus,
   useToggleFeatured,
   useDeleteProperty,
-  useBulkUpdatePropertyStatus,
   useBulkDeleteProperties,
 } from "@/hooks/useProperties";
 import { Link } from "@tanstack/react-router";
 import { formatPrice, formatDate } from "@/lib/format";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/errors";
-import type { PropertyStatus } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/_admin/admin/properties")({
   component: AdminProperties,
@@ -28,15 +23,12 @@ const PAGE_SIZE = 10;
 
 function AdminProperties() {
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<PropertyStatus | "all">("all");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const { data, isLoading } = useProperties({ search: search || undefined, status });
-  const updateStatus = useUpdatePropertyStatus();
+  const { data, isLoading } = useProperties({ search: search || undefined, status: "all" });
   const toggleFeat = useToggleFeatured();
   const del = useDeleteProperty();
-  const bulkStatus = useBulkUpdatePropertyStatus();
   const bulkDelete = useBulkDeleteProperties();
 
   const all = data ?? [];
@@ -71,11 +63,6 @@ function AdminProperties() {
     });
 
   const ids = Array.from(selected);
-  const runBulk = async (s: PropertyStatus) => {
-    if (!ids.length) return;
-    await act(() => bulkStatus.mutateAsync({ ids, status: s }), `${ids.length} updated`);
-    setSelected(new Set());
-  };
   const runBulkDelete = async () => {
     if (!ids.length) return;
     if (!confirm(`Delete ${ids.length} properties? This cannot be undone.`)) return;
@@ -92,16 +79,6 @@ function AdminProperties() {
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="max-w-xs"
         />
-        <Select value={status} onValueChange={(v) => { setStatus(v as PropertyStatus | "all"); setPage(1); }}>
-          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="rejected">Rejected</SelectItem>
-            <SelectItem value="sold">Sold</SelectItem>
-          </SelectContent>
-        </Select>
         <div className="ml-auto text-sm text-muted-foreground">
           {all.length} total
         </div>
@@ -110,9 +87,6 @@ function AdminProperties() {
       {ids.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-primary/30 bg-primary/5 p-3">
           <span className="text-sm font-medium">{ids.length} selected</span>
-          <Button size="sm" variant="outline" onClick={() => runBulk("approved")}>Approve</Button>
-          <Button size="sm" variant="outline" onClick={() => runBulk("rejected")}>Reject</Button>
-          <Button size="sm" variant="outline" onClick={() => runBulk("sold")}>Mark sold</Button>
           <Button size="sm" variant="destructive" onClick={runBulkDelete}>Delete</Button>
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
         </div>
@@ -128,16 +102,15 @@ function AdminProperties() {
               <th className="px-4 py-3">Property</th>
               <th className="px-4 py-3">Price</th>
               <th className="px-4 py-3">Listing</th>
-              <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Views</th>
               <th className="px-4 py-3">Created</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>}
+            {isLoading && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>}
             {!isLoading && pageItems.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No properties.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No properties.</td></tr>
             )}
             {pageItems.map((p) => (
               <tr key={p.id} className="border-t">
@@ -155,7 +128,6 @@ function AdminProperties() {
                 </td>
                 <td className="px-4 py-3">{formatPrice(p.price, p.listing_type)}</td>
                 <td className="px-4 py-3 capitalize">{p.listing_type}</td>
-                <td className="px-4 py-3"><StatusBadge s={p.status} /></td>
                 <td className="px-4 py-3">{p.views}</td>
                 <td className="px-4 py-3">{formatDate(p.created_at)}</td>
                 <td className="px-4 py-3">
@@ -165,26 +137,6 @@ function AdminProperties() {
                         <Eye className="h-4 w-4" />
                       </Button>
                     </Link>
-                    {p.status !== "approved" && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={`Approve ${p.title}`}
-                        onClick={() => act(() => updateStatus.mutateAsync({ id: p.id, status: "approved" }), "Approved")}
-                      >
-                        <Check className="h-4 w-4 text-success" />
-                      </Button>
-                    )}
-                    {p.status !== "rejected" && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={`Reject ${p.title}`}
-                        onClick={() => act(() => updateStatus.mutateAsync({ id: p.id, status: "rejected" }), "Rejected")}
-                      >
-                        <X className="h-4 w-4 text-destructive" />
-                      </Button>
-                    )}
                     <Button
                       size="icon"
                       variant="ghost"
@@ -221,11 +173,4 @@ function AdminProperties() {
       </div>
     </div>
   );
-}
-
-function StatusBadge({ s }: { s: PropertyStatus }) {
-  const cls = s === "approved" ? "bg-success text-success-foreground" :
-              s === "pending" ? "bg-warning text-warning-foreground" :
-              s === "rejected" ? "bg-destructive text-destructive-foreground" : "bg-muted";
-  return <Badge className={cls}>{s}</Badge>;
 }

@@ -165,7 +165,7 @@ export function useCreateProperty() {
           zip_code: null,
           images: payload.images ?? [],
           agent_id: payload.agent_id,
-          status: "pending",
+          status: payload.status ?? "approved",
           featured: false,
           views: 0,
           created_at: new Date().toISOString(),
@@ -173,7 +173,11 @@ export function useCreateProperty() {
         MOCK_PROPERTIES.push(newProp);
         return newProp;
       }
-      const { data, error } = await supabase.from("properties").insert(payload).select().single();
+      const { data, error } = await supabase
+        .from("properties")
+        .insert({ ...payload, status: payload.status ?? "approved" })
+        .select()
+        .single();
       if (error) throw toAppError(error, "Could not create this property. Please check the details and try again.");
       return data as Property;
     },
@@ -196,22 +200,6 @@ export function useUpdateProperty() {
     onSuccess: (_d, vars) => {
       invalidatePropertyCaches(qc, [vars.id]);
     },
-  });
-}
-
-export function useUpdatePropertyStatus() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: PropertyStatus }) => {
-      if (!isSupabaseConfigured || !supabase) {
-        const idx = MOCK_PROPERTIES.findIndex((p) => p.id === id);
-        if (idx !== -1) MOCK_PROPERTIES[idx].status = status;
-        return;
-      }
-      const { error } = await supabase.from("properties").update({ status }).eq("id", id);
-      if (error) throw toAppError(error, "Could not update this property status. Please try again.");
-    },
-    onSuccess: (_d, vars) => invalidatePropertyCaches(qc, [vars.id]),
   });
 }
 
@@ -244,24 +232,6 @@ export function useDeleteProperty() {
       if (error) throw toAppError(error, "Could not delete this property. Please try again.");
     },
     onSuccess: (_d, id) => invalidatePropertyCaches(qc, [id]),
-  });
-}
-
-export function useBulkUpdatePropertyStatus() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ ids, status }: { ids: string[]; status: PropertyStatus }) => {
-      if (!isSupabaseConfigured || !supabase) {
-        ids.forEach((id) => {
-          const idx = MOCK_PROPERTIES.findIndex((p) => p.id === id);
-          if (idx !== -1) MOCK_PROPERTIES[idx].status = status;
-        });
-        return;
-      }
-      const { error } = await supabase.from("properties").update({ status }).in("id", ids);
-      if (error) throw toAppError(error, "Could not update the selected properties. Please try again.");
-    },
-    onSuccess: (_d, vars) => invalidatePropertyCaches(qc, vars.ids),
   });
 }
 

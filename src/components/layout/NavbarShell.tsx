@@ -53,6 +53,7 @@ export function NavbarShell() {
   const roleReady = !loading;
   const isAdmin = roleReady && role === "admin";
   const isAgent = roleReady && role === "agent";
+  const isAgentPortalUser = roleReady && (role === "agent" || role === "pending_agent");
   const canListProperty = isAdmin || isAgent;
   const close = () => setMobileOpen(false);
   const goToAddProperty = () => {
@@ -77,7 +78,7 @@ export function NavbarShell() {
         <nav className="hidden items-center gap-1 md:flex">
           <NavLink to="/" label="Home" active={path === "/"} />
           <NavLink to="/properties" label="Properties" active={path === "/properties"} />
-          {isAgent && <NavLink to="/agent" label="Agent Portal" active={path.startsWith("/agent")} />}
+          {isAgentPortalUser && <NavLink to="/agent" label="Agent Portal" active={path.startsWith("/agent")} />}
           {user && <NavLink to="/messages" label="Messages" active={path === "/messages"} />}
         </nav>
 
@@ -93,7 +94,7 @@ export function NavbarShell() {
                 <DropdownMenuLabel className="py-2.5 font-normal"><div className="text-sm font-medium">{user.email}</div><div className="mt-0.5 text-xs capitalize text-muted-foreground">{roleReady ? role : "Loading..."}</div></DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {isAdmin && <DropdownMenuItem onClick={() => void navigate({ to: "/admin/dashboard" })} className="cursor-pointer gap-2"><LayoutDashboard className="h-4 w-4" /> Admin Dashboard</DropdownMenuItem>}
-                {isAgent && <DropdownMenuItem onClick={() => void navigate({ to: "/agent" })} className="cursor-pointer gap-2"><Building2 className="h-4 w-4" /> Agent Portal</DropdownMenuItem>}
+                {isAgentPortalUser && <DropdownMenuItem onClick={() => void navigate({ to: "/agent" })} className="cursor-pointer gap-2"><Building2 className="h-4 w-4" /> Agent Portal</DropdownMenuItem>}
                 <DropdownMenuItem onClick={() => void navigate({ to: "/dashboard" })} className="cursor-pointer gap-2"><UserIcon className="h-4 w-4" /> My Dashboard</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => void navigate({ to: "/messages" })} className="cursor-pointer gap-2"><MessageSquare className="h-4 w-4" /> Messages</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => void navigate({ to: "/dashboard", search: { tab: "saved" } as never })} className="cursor-pointer gap-2"><Heart className="h-4 w-4" /> Saved Properties</DropdownMenuItem>
@@ -113,7 +114,7 @@ export function NavbarShell() {
         <nav className="mx-auto flex max-w-7xl flex-col gap-0.5 px-4 py-3 pb-6">
           <MobLink to="/" label="Home" icon={<Home className="h-4 w-4" />} active={path === "/"} onClick={close} />
           <MobLink to="/properties" label="Properties" icon={<Search className="h-4 w-4" />} active={path === "/properties"} onClick={close} />
-          {isAgent && <MobLink to="/agent" label="Agent Portal" icon={<Building2 className="h-4 w-4" />} active={path.startsWith("/agent")} onClick={close} />}
+          {isAgentPortalUser && <MobLink to="/agent" label="Agent Portal" icon={<Building2 className="h-4 w-4" />} active={path.startsWith("/agent")} onClick={close} />}
           {isAdmin && <MobLink to="/admin/dashboard" label="Admin Panel" icon={<LayoutDashboard className="h-4 w-4" />} active={path.startsWith("/admin")} onClick={close} />}
           {user && <MobLink to="/dashboard" label="My Dashboard" icon={<UserIcon className="h-4 w-4" />} active={path === "/dashboard"} onClick={close} />}
           {user && <MobLink to="/messages" label="Messages" icon={<MessageSquare className="h-4 w-4" />} active={path === "/messages"} onClick={close} />}

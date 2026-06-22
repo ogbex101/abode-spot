@@ -8,6 +8,7 @@ import type { AppRole, AppUser } from "@/lib/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { getErrorMessage, toAppError } from "@/lib/errors";
+import { toast } from "sonner";
 
 interface AuthContextValue {
   user: User | null;
@@ -24,7 +25,7 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const PROFILE_LOAD_TIMEOUT_MS = 8000;
+const PROFILE_LOAD_TIMEOUT_MS = 30_000;
 
 function fallbackProfile(authUser: User): AppUser {
   return {
@@ -38,6 +39,10 @@ function fallbackProfile(authUser: User): AppUser {
     avatar_url: null,
     created_at: new Date().toISOString(),
   };
+}
+
+function isAppRole(value: unknown): value is AppRole {
+  return value === "admin" || value === "agent" || value === "pending_agent" || value === "user";
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -62,12 +67,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const activeSessionUserId = useRef<string | null>(null);
   const profileLoadedForUser = useRef<string | null>(null);
+  const profileSeenForUser = useRef<string | null>(null);
   const profileLoadForUser = useRef<{ userId: string; promise: Promise<void> } | null>(null);
+  const previousRole = useRef<AppRole | null>(null);
+  const approvalToastForUser = useRef<string | null>(null);
 
   const clearAuthState = useCallback(async () => {
     activeSessionUserId.current = null;
     profileLoadedForUser.current = null;
+    profileSeenForUser.current = null;
     profileLoadForUser.current = null;
+    previousRole.current = null;
+    approvalToastForUser.current = null;
     setSession(null);
     setUser(null);
     setProfile(null);
@@ -114,6 +125,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setProfile(profileRow);
+    profileSeenForUser.current = authUser.id;
+    setRole(isAppRole(profileRow.role) ? profileRow.role : "user");
 
     const { data: roles, error: rolesError } = await supabase
       .from("user_roles")
@@ -148,15 +161,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (profileLoadedForUser.current === authUser.id) return Promise.resolve();
     if (profileLoadForUser.current?.userId === authUser.id) return profileLoadForUser.current.promise;
 
+    let loadedProfile = false;
     const promise = withTimeout(loadProfileAndRole(authUser), PROFILE_LOAD_TIMEOUT_MS)
+      .then(() => {
+        loadedProfile = true;
+      })
       .catch((error) => {
         if (activeSessionUserId.current !== authUser.id) return;
-        console.error("Error loading profile:", error);
-        setProfile(fallbackProfile(authUser));
-        setRole("user");
+        const rawMessage = error instanceof Error ? error.message : "";
+        if (/timed out/i.test(rawMessage)) {
+          console.warn("Profile load timed out; using a temporary profile fallback.");
+        } else {
+          console.error("Error loading profile:", error);
+        }
+        if (profileSeenForUser.current !== authUser.id) {
+          setProfile(fallbackProfile(authUser));
+          setRole("user");
+        }
       })
       .finally(() => {
-        if (activeSessionUserId.current === authUser.id) profileLoadedForUser.current = authUser.id;
+        if (loadedProfile && activeSessionUserId.current === authUser.id) {
+          profileLoadedForUser.current = authUser.id;
+        }
         if (profileLoadForUser.current?.userId === authUser.id) profileLoadForUser.current = null;
       });
 
@@ -178,6 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       activeSessionUserId.current = nextUserId;
       if (isDifferentUser) {
         profileLoadedForUser.current = null;
+        profileSeenForUser.current = null;
         profileLoadForUser.current = null;
         setProfile(null);
         setRole("user");
@@ -215,6 +242,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
     };
   }, [clearAuthState, queryClient, router, startProfileLoad]);
+
+  useEffect(() => {
+    if (!user) {
+      previousRole.current = null;
+      approvalToastForUser.current = null;
+      return;
+    }
+
+    if (
+      previousRole.current === "pending_agent"
+      && role === "agent"
+      && approvalToastForUser.current !== user.id
+    ) {
+      toast.success("Your agent account has been approved. You can now list properties and chat with clients.", {
+        duration: 5000,
+      });
+      approvalToastForUser.current = user.id;
+    }
+
+    previousRole.current = role;
+  }, [role, user]);
+
+  useEffect(() => {
+    if (!user || !supabase) return;
+
+    const refreshCurrentProfile = () => {
+      if (profileLoadForUser.current?.userId === user.id) return;
+      profileLoadedForUser.current = null;
+      void startProfileLoad(user).finally(() => {
+        if (activeSessionUserId.current !== user.id) return;
+        queryClient.invalidateQueries();
+        void router.invalidate();
+      });
+    };
+
+    const subscription = supabase
+      .channel(`auth-profile:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "users", filter: `id=eq.${user.id}` },
+        refreshCurrentProfile
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "user_roles", filter: `user_id=eq.${user.id}` },
+        refreshCurrentProfile
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [queryClient, router, startProfileLoad, user]);
 
   const signIn = async (email: string, password: string) => {
     if (!supabase) return { error: getErrorMessage("Supabase not configured") };
@@ -256,22 +336,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const applyForAgent = async (applicationData: any) => {
-    if (!supabase || !user) return { error: getErrorMessage("Not logged in") };
+    if (!supabase) return { error: getErrorMessage("Supabase not configured") };
     try {
+      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+      if (!currentUser) return { error: getErrorMessage("Not logged in") };
+
       const { error: roleError } = await supabase.from("user_roles").upsert({
-        user_id: user.id,
+        user_id: currentUser.id,
         role: "pending_agent",
       }, { onConflict: "user_id,role", ignoreDuplicates: true });
       if (roleError) throw roleError;
       const { error: userError } = await supabase.from("users").update({
         role: "pending_agent",
         agent_status: "pending",
-      }).eq("id", user.id);
+      }).eq("id", currentUser.id);
       if (userError) throw userError;
       const { error } = await supabase.from("agent_applications").insert({
-        user_id: user.id,
+        user_id: currentUser.id,
         full_name: applicationData.fullName,
-        email: user.email,
+        email: currentUser.email,
         phone: applicationData.phone,
         company_name: applicationData.companyName,
         license_number: applicationData.licenseNumber,
@@ -279,6 +362,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status: "pending",
       });
       if (error) throw toAppError(error, "Could not submit your application. Please try again.");
+      setProfile((current) => ({
+        ...(current && current.id === currentUser.id ? current : fallbackProfile(currentUser)),
+        role: "pending_agent",
+        phone: applicationData.phone || current?.phone || null,
+        company_name: applicationData.companyName || current?.company_name || null,
+      }));
+      setRole("pending_agent");
+      activeSessionUserId.current = currentUser.id;
+      profileLoadedForUser.current = currentUser.id;
+      profileSeenForUser.current = currentUser.id;
+      queryClient.invalidateQueries();
+      void router.invalidate();
       return { error: null };
     } catch (error) {
       return { error: getErrorMessage(error, "Could not submit your application. Please try again.") };

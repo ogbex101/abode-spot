@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   type Conversation,
   type ConversationParticipant,
+  PENDING_AGENT_CHAT_MESSAGE,
   useAgentDirectory,
   useConversation,
   useConversations,
@@ -44,6 +45,7 @@ function MessagesPage() {
   const selectedQuery = useConversation(selectedFromList ? null : selectedId);
   const selectedConversation = selectedFromList ?? selectedQuery.data ?? null;
   const [agentDialogOpen, setAgentDialogOpen] = useState(false);
+  const isPendingAgent = role === "pending_agent";
 
   const totalUnread = useMemo(() => (
     conversations.data?.reduce((count, conversation) => count + conversation.unread_count, 0) ?? 0
@@ -119,7 +121,13 @@ function MessagesPage() {
         {hasSelectedConversation && (
           <section className="min-h-[calc(100vh-4rem)] border bg-card md:min-h-[74vh] md:rounded-lg">
             {selectedConversation ? (
-              <MessageThread conversation={selectedConversation} currentUserId={user.id} onBack={closeConversation} />
+              <MessageThread
+                conversation={selectedConversation}
+                currentUserId={user.id}
+                onBack={closeConversation}
+                canSend={!isPendingAgent}
+                disabledReason={isPendingAgent ? PENDING_AGENT_CHAT_MESSAGE : undefined}
+              />
             ) : selectedQuery.isLoading ? (
               <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center md:min-h-[74vh]">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -206,10 +214,14 @@ function MessageThread({
   conversation,
   currentUserId,
   onBack,
+  canSend = true,
+  disabledReason,
 }: {
   conversation: Conversation;
   currentUserId: string;
   onBack: () => void;
+  canSend?: boolean;
+  disabledReason?: string;
 }) {
   const { messages, isLoading, sendMessageAsync, isSending, markAsRead } = useMessages(conversation.id);
   const [message, setMessage] = useState("");
@@ -228,6 +240,10 @@ function MessageThread({
   const handleSend = async (event: React.FormEvent) => {
     event.preventDefault();
     const body = message.trim();
+    if (!canSend) {
+      toast.info(disabledReason ?? "Messaging is not available for this account yet.");
+      return;
+    }
     if (!receiverId || !body) return;
     setMessage("");
     try {
@@ -307,6 +323,9 @@ function MessageThread({
       </div>
 
       <form className="border-t bg-card p-3 md:p-4" onSubmit={handleSend}>
+        {!canSend && disabledReason && (
+          <p className="mb-2 text-xs text-muted-foreground">{disabledReason}</p>
+        )}
         <div className="flex items-end gap-2">
           <Label htmlFor="message-body" className="sr-only">Message</Label>
           <Textarea
@@ -314,14 +333,14 @@ function MessageThread({
             rows={1}
             value={message}
             onChange={(event) => setMessage(event.target.value.slice(0, 1000))}
-            placeholder="Type your message..."
-            disabled={!receiverId || isSending}
+            placeholder={canSend ? "Type your message..." : "Messaging unlocks after approval"}
+            disabled={!canSend || !receiverId || isSending}
             className="max-h-32 min-h-12 resize-none rounded-2xl bg-muted/60 px-4 py-3 focus-visible:bg-background"
           />
           <Button
             type="submit"
             size="icon"
-            disabled={!message.trim() || !receiverId || isSending}
+            disabled={!canSend || !message.trim() || !receiverId || isSending}
             className="h-12 w-12 shrink-0 rounded-full"
             aria-label="Send message"
           >

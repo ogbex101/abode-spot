@@ -12,7 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCreateProperty } from "@/hooks/useProperties";
 import { PROPERTY_TYPES } from "@/lib/constants";
 import { getErrorMessage } from "@/lib/errors";
-import type { ListingType, PropertyStatus, PropertyType } from "@/lib/types";
+import type { ListingType, PropertyType } from "@/lib/types";
 
 const schema = z.object({
   title: z.string().min(3).max(150),
@@ -24,34 +24,26 @@ const schema = z.object({
   listing_type: z.enum(["sale", "rent"]),
   address: z.string().max(200).optional(),
   state: z.string().max(50).optional(),
-  status: z.enum(["pending", "approved", "rejected", "sold"]),
 });
-
-const statuses: { value: PropertyStatus; label: string }[] = [
-  { value: "approved", label: "Approved (live immediately)" },
-  { value: "pending", label: "Pending (needs review)" },
-  { value: "rejected", label: "Rejected" },
-  { value: "sold", label: "Sold" },
-];
 
 export function AdminCreatePropertyForm() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const create = useCreateProperty();
   const [images, setImages] = useState<string[]>([]);
-  const [form, setForm] = useState({ title: "", description: "", price: "", bedrooms: "", bathrooms: "", property_type: "house" as PropertyType, listing_type: "sale" as ListingType, address: "", state: "", status: "approved" as PropertyStatus });
+  const [form, setForm] = useState({ title: "", description: "", price: "", bedrooms: "", bathrooms: "", property_type: "house" as PropertyType, listing_type: "sale" as ListingType, address: "", state: "" });
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const result = schema.safeParse({
       title: form.title.trim(), description: form.description.trim() || undefined, price: Number(form.price),
       bedrooms: form.bedrooms ? Number(form.bedrooms) : undefined, bathrooms: form.bathrooms ? Number(form.bathrooms) : undefined,
-      property_type: form.property_type, listing_type: form.listing_type, address: form.address.trim() || undefined, state: form.state.trim() || undefined, status: form.status,
+      property_type: form.property_type, listing_type: form.listing_type, address: form.address.trim() || undefined, state: form.state.trim() || undefined,
     });
     if (!result.success) return toast.error(result.error.issues[0].message);
     if (!user) return;
     try {
-      await create.mutateAsync({ ...result.data, images, agent_id: user.id });
+      await create.mutateAsync({ ...result.data, images, agent_id: user.id, status: "approved" });
       toast.success("Property created successfully!");
       await navigate({ to: "/admin/properties" });
     } catch (error) {
@@ -61,14 +53,13 @@ export function AdminCreatePropertyForm() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="mb-6"><h1 className="text-2xl font-bold" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>Add New Property</h1><p className="mt-1 text-sm text-muted-foreground">Set the listing status to control when it appears publicly.</p></div>
+      <div className="mb-6"><h1 className="text-2xl font-bold" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>Add New Property</h1><p className="mt-1 text-sm text-muted-foreground">Create a listing that appears publicly immediately.</p></div>
       <form onSubmit={submit} className="space-y-8">
         <Card title="Basic Information"><div className="grid gap-5 md:grid-cols-2">
           <Field label="Title *"><Input required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="e.g. Modern 3-Bedroom Apartment in Lekki" /></Field>
           <Field label="Price (₦) *"><Input required type="number" min="0" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></Field>
           <Field label="Property Type"><Select value={form.property_type} onValueChange={(value) => setForm({ ...form, property_type: value as PropertyType })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PROPERTY_TYPES.map((type) => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}</SelectContent></Select></Field>
           <Field label="Listing Type"><Select value={form.listing_type} onValueChange={(value) => setForm({ ...form, listing_type: value as ListingType })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="sale">For Sale</SelectItem><SelectItem value="rent">For Rent</SelectItem></SelectContent></Select></Field>
-          <Field label="Status"><Select value={form.status} onValueChange={(value) => setForm({ ...form, status: value as PropertyStatus })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.map((status) => <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>)}</SelectContent></Select></Field>
           <div className="md:col-span-2"><Field label="Description"><Textarea rows={4} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value.slice(0, 2000) })} /></Field></div>
         </div></Card>
         <Card title="Property Details"><div className="grid gap-5 md:grid-cols-2"><Field label="Bedrooms"><Input type="number" min="0" value={form.bedrooms} onChange={(event) => setForm({ ...form, bedrooms: event.target.value })} /></Field><Field label="Bathrooms"><Input type="number" min="0" step="0.5" value={form.bathrooms} onChange={(event) => setForm({ ...form, bathrooms: event.target.value })} /></Field></div></Card>

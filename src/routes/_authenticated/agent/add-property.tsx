@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
-import { ArrowLeft, Building2 } from "lucide-react";
+import { ArrowLeft, Building2, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,6 +50,23 @@ function AgentAddProperty() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [images, setImages] = useState<string[]>([]);
 
+  if (role === "pending_agent") {
+    return (
+      <div className="mx-auto max-w-md px-4 py-20 text-center">
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-warning/15 text-warning-foreground">
+          <Lock className="h-7 w-7" />
+        </div>
+        <h1 className="text-xl font-bold">Agent approval pending</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Your agent account is awaiting admin approval. You can list properties after an admin approves you.
+        </p>
+        <Button type="button" variant="outline" className="mt-5" onClick={() => void navigate({ to: "/agent" })}>
+          Back to Agent Portal
+        </Button>
+      </div>
+    );
+  }
+
   if (role !== "agent" && role !== "admin") {
     return (
       <div className="mx-auto max-w-md px-4 py-20 text-center">
@@ -57,7 +74,7 @@ function AgentAddProperty() {
           <Building2 className="h-7 w-7" />
         </div>
         <h1 className="text-xl font-bold">Agent access required</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Only approved agents can submit property listings.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Only approved agents can create live property listings.</p>
         <Link to="/dashboard" className="mt-5 inline-block text-sm text-primary hover:underline">Back to dashboard</Link>
       </div>
     );
@@ -83,8 +100,8 @@ function AgentAddProperty() {
     if (!user) return;
 
     try {
-      await create.mutateAsync({ ...parsed.data, images, agent_id: user.id, status: "pending" });
-      toast.success("Property submitted for approval");
+      await create.mutateAsync({ ...parsed.data, images, agent_id: user.id, status: "approved" });
+      toast.success("Property is now live");
       await navigate({ to: "/agent" });
     } catch (error) {
       toast.error(getErrorMessage(error, "Could not submit this property. Please try again."));
@@ -96,7 +113,7 @@ function AgentAddProperty() {
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Add Property</h1>
-          <p className="mt-1 text-muted-foreground">Submit a listing for admin approval before it goes live.</p>
+          <p className="mt-1 text-muted-foreground">Create a live listing that appears to buyers immediately.</p>
         </div>
         <Button type="button" variant="outline" onClick={() => void navigate({ to: "/agent" })} className="gap-2"><ArrowLeft className="h-4 w-4" /> Back to dashboard</Button>
       </div>

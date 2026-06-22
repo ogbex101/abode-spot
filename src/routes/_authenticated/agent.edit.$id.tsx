@@ -68,7 +68,7 @@ function EditProperty() {
     });
     if (!parsed.success) return toast.error(parsed.error.issues[0].message);
     try {
-      await update.mutateAsync({ id: property.id, ...parsed.data, images, ...(role === "admin" ? {} : { status: "pending" as const }) });
+      await update.mutateAsync({ id: property.id, ...parsed.data, images });
       toast.success("Property updated");
       await navigate({ to: "/agent" });
     } catch (error) {
@@ -78,7 +78,7 @@ function EditProperty() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
-      <div className="mb-6 flex items-center justify-between gap-3"><div><h1 className="text-3xl font-bold">Edit Property</h1><p className="text-muted-foreground">Changes will resubmit the listing for review.</p></div><Link to="/agent" className="text-sm text-primary hover:underline">← Back</Link></div>
+      <div className="mb-6 flex items-center justify-between gap-3"><div><h1 className="text-3xl font-bold">Edit Property</h1><p className="text-muted-foreground">Changes update the live listing immediately.</p></div><Link to="/agent" className="text-sm text-primary hover:underline">← Back</Link></div>
       <form onSubmit={submit} className="grid gap-4 rounded-2xl border bg-card p-6 md:grid-cols-2">
         <Field label="Title"><Input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></Field>
         <Field label="Price (₦)"><Input type="number" min="0" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} required /></Field>
