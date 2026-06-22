@@ -39,14 +39,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const router = useRouter();
 
-  const clearAuthState = useCallback(() => {
+  const clearAuthState = useCallback(async () => {
     setSession(null);
     setUser(null);
     setProfile(null);
     setRole("user");
-    void queryClient.cancelQueries();
+    await queryClient.cancelQueries();
     queryClient.clear();
-    void router.invalidate();
+    await router.invalidate();
   }, [queryClient, router]);
 
   const loadProfileAndRole = useCallback(async (authUser: User) => {
@@ -129,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         queryClient.invalidateQueries();
         void router.invalidate();
       } else {
-        clearAuthState();
+        void clearAuthState();
       }
     });
     
@@ -224,18 +224,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     if (!supabase) {
-      clearAuthState();
+      await clearAuthState();
       return;
     }
 
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut({ scope: "local" });
     if (error) {
-      const fallback = await supabase.auth.signOut({ scope: "local" });
-      if (fallback.error) {
-        console.warn("Sign out error:", getErrorMessage(fallback.error, "Could not complete sign out."));
-      }
+      console.warn("Sign out error:", getErrorMessage(error, "Could not complete sign out."));
     }
-    clearAuthState();
+    await clearAuthState();
   };
 
   const refreshProfile = async () => {

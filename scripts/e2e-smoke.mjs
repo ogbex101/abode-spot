@@ -282,7 +282,7 @@ async function registerAgent(browser) {
 
 async function login(browser, email, expectedPath, label) {
   const { context, page } = await newPage(browser, label);
-  await page.goto(`${BASE_URL}/login`);
+  await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded" });
   await page.getByLabel(/^Email$/i).fill(email);
   await page.getByLabel(/^Password$/i).fill(PASSWORD);
   await page.getByRole("button", { name: /Sign in/i }).click();
@@ -585,6 +585,31 @@ async function routeSmoke(browser) {
   await agent.context.close();
 }
 
+async function logoutSmoke(browser) {
+  const admin = await login(browser, ACCOUNTS.admin, "/admin/dashboard", "admin-logout");
+  await admin.page.getByRole("button", { name: /Sign out/i }).click();
+  const adminLoggedOut = await admin.page
+    .getByRole("button", { name: /^Login$/i })
+    .waitFor({ state: "visible", timeout: 2000 })
+    .then(() => true)
+    .catch(() => false);
+  check(adminLoggedOut, "Admin sign out did not update the UI after one click");
+  check(new URL(admin.page.url()).pathname === "/", `Admin sign out should navigate home, got ${admin.page.url()}`);
+  await admin.context.close();
+
+  const buyer = await login(browser, ACCOUNTS.buyer, "/dashboard", "buyer-logout");
+  await buyer.page.locator("header").getByRole("button").last().click();
+  await buyer.page.getByRole("menuitem", { name: /Sign out/i }).click();
+  const buyerLoggedOut = await buyer.page
+    .getByRole("button", { name: /^Login$/i })
+    .waitFor({ state: "visible", timeout: 2000 })
+    .then(() => true)
+    .catch(() => false);
+  check(buyerLoggedOut, "Buyer sign out did not update the UI after one click");
+  check(new URL(buyer.page.url()).pathname === "/", `Buyer sign out should navigate home, got ${buyer.page.url()}`);
+  await buyer.context.close();
+}
+
 async function main() {
   console.log(`Smoke testing ${BASE_URL}`);
   await resetTestData();
@@ -610,6 +635,7 @@ async function main() {
       await agentDirectChat(browser);
     }
     await routeSmoke(browser);
+    await logoutSmoke(browser);
   } finally {
     await browser.close();
   }

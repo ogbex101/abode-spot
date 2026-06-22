@@ -66,7 +66,7 @@ export function Navbar() {
   const handleSignOut = async () => {
     close();
     await signOut();
-    await navigate({ to: "/" });
+    await navigate({ to: "/", replace: true });
   };
 
   return (

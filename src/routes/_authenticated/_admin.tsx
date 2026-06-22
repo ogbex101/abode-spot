@@ -33,7 +33,7 @@ function AdminLayout() {
 
   const handleSignOut = async () => {
     await signOut();
-    await navigate({ to: "/" });
+    await navigate({ to: "/", replace: true });
   };
 
   useEffect(() => {
