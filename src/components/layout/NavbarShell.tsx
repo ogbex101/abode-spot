@@ -85,7 +85,7 @@ export function NavbarShell() {
         <div className="hidden items-center gap-2 md:flex">
           {canListProperty && <Button variant="ghost" size="sm" onClick={goToAddProperty} className="gap-1.5 text-sm font-medium hover:bg-primary/8"><Plus className="h-3.5 w-3.5" /> List Property</Button>}
           <Link to="/properties"><Button variant="ghost" size="icon" aria-label="Search properties"><Search className="h-4 w-4" /></Button></Link>
-          <Link to="/dashboard" className="relative"><Button variant="ghost" size="icon" aria-label="Saved properties"><Heart className="h-4 w-4" /></Button>{savedIds.length > 0 && <Badge className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full px-1 text-[10px] font-bold">{savedIds.length}</Badge>}</Link>
+          <Link to="/dashboard" search={{ tab: "saved" } as never} className="relative"><Button variant="ghost" size="icon" aria-label="Saved properties"><Heart className="h-4 w-4" /></Button>{savedIds.length > 0 && <Badge className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full px-1 text-[10px] font-bold">{savedIds.length}</Badge>}</Link>
           {user && <Link to="/messages"><Button variant="ghost" size="icon" aria-label="Messages"><MessageSquare className="h-4 w-4" /></Button></Link>}
           {user ? (
             <DropdownMenu>
