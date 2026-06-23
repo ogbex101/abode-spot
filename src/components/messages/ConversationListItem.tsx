@@ -45,7 +45,7 @@ export function ConversationListItem({
     <button
       type="button"
       onClick={onOpen}
-      aria-label={`Open chat with ${displayName}`}
+      aria-label={`Conversation with ${displayName}`}
       data-testid="conversation-card"
       className={cn(
         "group flex w-full min-w-0 items-center text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",

@@ -631,7 +631,7 @@ async function conversationCardSmoke(browser, propertyConversationId, directConv
   await buyer.page.goto(`${BASE_URL}/dashboard`);
   await buyer.page.getByText(/Recent Messages/i).waitFor({ timeout: 15000 });
   check(await buyer.page.getByRole("button", { name: /Open Chat/i }).count() === 0, "Buyer dashboard recent messages still shows Open Chat button");
-  await buyer.page.getByRole("button", { name: /Open chat with E2E Agent/i }).first().click();
+  await buyer.page.getByRole("button", { name: /Conversation with E2E Agent/i }).first().click();
   await waitForConversationPath(buyer.page, propertyConversationId);
 
   await buyer.page.goto(`${BASE_URL}/dashboard?tab=messages`);
@@ -644,15 +644,15 @@ async function conversationCardSmoke(browser, propertyConversationId, directConv
   await buyer.context.close();
 
   const agent = await login(browser, ACCOUNTS.agent, "/agent", "agent-dashboard-chat-cards");
-  await agent.page.getByRole("button", { name: /Open chat with E2E Buyer/i }).waitFor({ timeout: 15000 });
+  await agent.page.getByRole("button", { name: /Conversation with E2E Buyer/i }).waitFor({ timeout: 15000 });
   check(await agent.page.getByRole("button", { name: /Open Chat/i }).count() === 0, "Agent portal chat rooms still shows Open Chat button");
-  await agent.page.getByRole("button", { name: /Open chat with E2E Buyer/i }).click();
+  await agent.page.getByRole("button", { name: /Conversation with E2E Buyer/i }).click();
   await waitForConversationPath(agent.page, propertyConversationId);
 
   await agent.page.goto(`${BASE_URL}/agent`);
   await agent.page.setViewportSize({ width: 390, height: 844 });
   await agent.page.reload({ waitUntil: "domcontentloaded" });
-  await agent.page.getByRole("button", { name: /Open chat with E2E Buyer/i }).waitFor({ timeout: 15000 });
+  await agent.page.getByRole("button", { name: /Conversation with E2E Buyer/i }).waitFor({ timeout: 15000 });
   await assertNoHorizontalOverflow(agent.page, "Agent portal chat rooms");
   await agent.context.close();
 
