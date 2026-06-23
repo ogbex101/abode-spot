@@ -97,7 +97,10 @@ async function resetTestData() {
     "delete E2E properties"
   );
 
-  const testUsers = (await listAuthUsers()).filter((user) => user.email?.toLowerCase().endsWith(`@${TEST_EMAIL_DOMAIN}`));
+  const testUsers = (await listAuthUsers()).filter((user) => {
+    const email = user.email?.toLowerCase() ?? "";
+    return email.includes("+") && email.endsWith(`@${TEST_EMAIL_DOMAIN}`);
+  });
   for (const user of testUsers) {
       const { error } = await service.auth.admin.deleteUser(user.id);
       if (error) throw new Error(`delete ${user.email}: ${error.message}`);
