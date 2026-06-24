@@ -21,6 +21,7 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAgentRouteImport } from './routes/_authenticated/agent'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/_admin'
 import { Route as AuthenticatedAgentInquiriesRouteImport } from './routes/_authenticated/agent/inquiries'
+import { Route as AuthenticatedAgentAddPropertyRouteImport } from './routes/_authenticated/agent/add-property'
 import { Route as AuthenticatedAgentEditIdRouteImport } from './routes/_authenticated/agent.edit.$id'
 import { Route as AuthenticatedAdminAdminUsersRouteImport } from './routes/_authenticated/_admin/admin.users'
 import { Route as AuthenticatedAdminAdminPropertiesRouteImport } from './routes/_authenticated/_admin/admin.properties'
@@ -89,6 +90,12 @@ const AuthenticatedAgentInquiriesRoute =
     path: '/inquiries',
     getParentRoute: () => AuthenticatedAgentRoute,
   } as any)
+const AuthenticatedAgentAddPropertyRoute =
+  AuthenticatedAgentAddPropertyRouteImport.update({
+    id: '/add-property',
+    path: '/add-property',
+    getParentRoute: () => AuthenticatedAgentRoute,
+  } as any)
 const AuthenticatedAgentEditIdRoute =
   AuthenticatedAgentEditIdRouteImport.update({
     id: '/edit/$id',
@@ -148,6 +155,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/messages': typeof AuthenticatedMessagesRoute
   '/property/$id': typeof PropertyIdRoute
+  '/agent/add-property': typeof AuthenticatedAgentAddPropertyRoute
   '/agent/inquiries': typeof AuthenticatedAgentInquiriesRoute
   '/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
   '/admin/dashboard': typeof AuthenticatedAdminAdminDashboardRoute
@@ -168,6 +176,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/messages': typeof AuthenticatedMessagesRoute
   '/property/$id': typeof PropertyIdRoute
+  '/agent/add-property': typeof AuthenticatedAgentAddPropertyRoute
   '/agent/inquiries': typeof AuthenticatedAgentInquiriesRoute
   '/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
   '/admin/dashboard': typeof AuthenticatedAdminAdminDashboardRoute
@@ -191,6 +200,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/messages': typeof AuthenticatedMessagesRoute
   '/property/$id': typeof PropertyIdRoute
+  '/_authenticated/agent/add-property': typeof AuthenticatedAgentAddPropertyRoute
   '/_authenticated/agent/inquiries': typeof AuthenticatedAgentInquiriesRoute
   '/_authenticated/_admin/admin/add-property': typeof AuthenticatedAdminAdminAddPropertyRoute
   '/_authenticated/_admin/admin/dashboard': typeof AuthenticatedAdminAdminDashboardRoute
@@ -213,6 +223,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/messages'
     | '/property/$id'
+    | '/agent/add-property'
     | '/agent/inquiries'
     | '/admin/add-property'
     | '/admin/dashboard'
@@ -233,6 +244,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/messages'
     | '/property/$id'
+    | '/agent/add-property'
     | '/agent/inquiries'
     | '/admin/add-property'
     | '/admin/dashboard'
@@ -255,6 +267,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/messages'
     | '/property/$id'
+    | '/_authenticated/agent/add-property'
     | '/_authenticated/agent/inquiries'
     | '/_authenticated/_admin/admin/add-property'
     | '/_authenticated/_admin/admin/dashboard'
@@ -362,6 +375,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgentInquiriesRouteImport
       parentRoute: typeof AuthenticatedAgentRoute
     }
+    '/_authenticated/agent/add-property': {
+      id: '/_authenticated/agent/add-property'
+      path: '/add-property'
+      fullPath: '/agent/add-property'
+      preLoaderRoute: typeof AuthenticatedAgentAddPropertyRouteImport
+      parentRoute: typeof AuthenticatedAgentRoute
+    }
     '/_authenticated/agent/edit/$id': {
       id: '/_authenticated/agent/edit/$id'
       path: '/edit/$id'
@@ -447,11 +467,13 @@ const AuthenticatedAdminRouteWithChildren =
   AuthenticatedAdminRoute._addFileChildren(AuthenticatedAdminRouteChildren)
 
 interface AuthenticatedAgentRouteChildren {
+  AuthenticatedAgentAddPropertyRoute: typeof AuthenticatedAgentAddPropertyRoute
   AuthenticatedAgentInquiriesRoute: typeof AuthenticatedAgentInquiriesRoute
   AuthenticatedAgentEditIdRoute: typeof AuthenticatedAgentEditIdRoute
 }
 
 const AuthenticatedAgentRouteChildren: AuthenticatedAgentRouteChildren = {
+  AuthenticatedAgentAddPropertyRoute: AuthenticatedAgentAddPropertyRoute,
   AuthenticatedAgentInquiriesRoute: AuthenticatedAgentInquiriesRoute,
   AuthenticatedAgentEditIdRoute: AuthenticatedAgentEditIdRoute,
 }

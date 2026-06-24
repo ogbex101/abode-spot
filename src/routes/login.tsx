@@ -30,7 +30,7 @@ function Login() {
   useEffect(() => {
     if (!didSignIn || loading || !user || !profile) return;
     if (role === "admin") navigate({ to: "/admin/dashboard" });
-    else if (role === "agent") navigate({ to: "/agent" });
+    else if (role === "agent" || role === "pending_agent") navigate({ to: "/agent" });
     else navigate({ to: "/dashboard" });
   }, [didSignIn, loading, user, profile, role, navigate]);
 

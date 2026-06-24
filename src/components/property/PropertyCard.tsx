@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Bed, Bath, Square, Heart, MapPin, Eye } from "lucide-react";
+import { Bed, Bath, Square, Heart, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PropertyCarousel } from "./PropertyCarousel";
 import type { Property } from "@/lib/types";
@@ -62,14 +62,6 @@ export function PropertyCard({ property, priority = false }: { property: Propert
           >
             <Heart className={cn("h-4 w-4", saved && "fill-current")} />
           </button>
-
-          {/* Views ghost pill */}
-          {property.views != null && property.views > 0 && (
-            <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-[11px] text-white backdrop-blur-sm">
-              <Eye className="h-3 w-3" />
-              {property.views}
-            </div>
-          )}
         </div>
 
         {/* Card body */}

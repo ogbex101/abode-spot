@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Heart, Inbox, User as UserIcon, Settings, Home, ArrowRight,
   TrendingUp, Building2, ChevronRight, Phone, Mail,
-  Loader2, Save, CheckCircle2, Clock, MessageSquare
+  Loader2, Save, CheckCircle2, MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useSavedProperties } from "@/hooks/useFavorites";
-import { useConversations, type Conversation } from "@/hooks/useMessages";
+import { useConversations } from "@/hooks/useMessages";
+import { ConversationListItem } from "@/components/messages/ConversationListItem";
 import { PropertyGrid } from "@/components/property/PropertyGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
@@ -40,7 +41,7 @@ function DashboardPage() {
     if (loading) return;
     if (role === "admin") {
       navigate({ to: "/admin/dashboard" });
-    } else if (role === "agent") {
+    } else if (role === "agent" || role === "pending_agent") {
       navigate({ to: "/agent" });
     }
   }, [role, loading, navigate]);
@@ -53,7 +54,7 @@ function DashboardPage() {
     );
   }
 
-  if (role === "admin" || role === "agent") {
+  if (role === "admin" || role === "agent" || role === "pending_agent") {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -66,7 +67,6 @@ function DashboardPage() {
     ? profile.full_name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
     : (user?.email ?? "U").slice(0, 2).toUpperCase();
 
-  const isPendingAgent = role === "pending_agent";
   const unreadMessages = conversations.data?.reduce((count, conversation) => count + conversation.unread_count, 0) ?? 0;
 
   const TABS = [
@@ -91,11 +91,6 @@ function DashboardPage() {
                 <h1 className="text-2xl font-bold" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
                   {displayName}
                 </h1>
-                {isPendingAgent && (
-                  <p className="text-xs text-yellow-300 mt-1 flex items-center gap-1">
-                    <Clock className="h-3 w-3" /> Agent application pending admin approval
-                  </p>
-                )}
               </div>
             </div>
             <div className="hidden sm:flex items-center gap-2">
@@ -152,9 +147,9 @@ function DashboardPage() {
               />
               <StatCard
                 label="Account Type"
-                value={isPendingAgent ? "pending_agent" : (role ?? "user")}
+                value={role ?? "user"}
                 icon={<UserIcon className="h-5 w-5" />}
-                sub={isPendingAgent ? "Awaiting approval" : "Active member"}
+                sub="Active member"
                 color="text-primary bg-primary/10"
                 onClick={() => setTab("profile")}
                 capitalize
@@ -195,29 +190,12 @@ function DashboardPage() {
                       </div>
                     ) : (
                       (conversations.data ?? []).slice(0, 4).map((conversation) => (
-                        <div 
-                          key={conversation.id} 
-                          className="p-3 hover:bg-muted/30 transition-colors cursor-pointer"
-                          onClick={() => navigate({ to: "/messages", search: { conversation: conversation.id } })}
-                        >
-                          <div className="flex items-start gap-2.5">
-                            <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                              <Inbox className="h-3.5 w-3.5 text-primary" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{conversation.other_user?.full_name || conversation.other_user?.email || "Chat room"}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">{conversation.last_message || conversation.property?.title || "No messages yet"}</p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <Badge variant="secondary">{conversation.conversation_type === "property" ? "Property" : "Direct"}</Badge>
-                                {conversation.unread_count > 0 && (
-                                  <Badge>{conversation.unread_count} unread</Badge>
-                                )}
-                                <span className="text-xs text-muted-foreground">{conversation.property?.title ?? "Agent chat"}</span>
-                              </div>
-                            </div>
-                            <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
-                          </div>
-                        </div>
+                        <ConversationListItem
+                          key={conversation.id}
+                          conversation={conversation}
+                          compact
+                          onOpen={() => navigate({ to: "/messages", search: { conversation: conversation.id } })}
+                        />
                       ))
                     )}
                     {(conversations.data ?? []).length > 4 && (
@@ -289,7 +267,7 @@ function DashboardPage() {
             ) : (
               <div className="space-y-4">
                 {(conversations.data ?? []).map((conversation) => (
-                  <ConversationCard
+                  <ConversationListItem
                     key={conversation.id}
                     conversation={conversation}
                     onOpen={() => navigate({ to: "/messages", search: { conversation: conversation.id } })}
@@ -301,7 +279,7 @@ function DashboardPage() {
 
           {/* ── PROFILE ── */}
           <TabsContent value="profile" className="mt-0">
-            <ProfileForm user={user} profile={profile} role={role} onSaved={refreshProfile} isPendingAgent={isPendingAgent} />
+            <ProfileForm user={user} profile={profile} role={role} onSaved={refreshProfile} />
           </TabsContent>
         </Tabs>
       </div>
@@ -310,62 +288,14 @@ function DashboardPage() {
   );
 }
 
-function ConversationCard({ conversation, onOpen }: { conversation: Conversation; onOpen: () => void }) {
-  const property = conversation.property;
-  const otherUser = conversation.other_user;
-
-  return (
-    <div className="rounded-2xl border bg-card overflow-hidden hover:shadow-md transition-all">
-      <div className="p-4">
-        <div className="flex gap-4">
-          {property?.images && property.images[0] && (
-            <img src={property.images[0]} alt="" className="h-16 w-20 rounded-lg object-cover shrink-0" />
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between flex-wrap gap-2">
-              <div>
-                <p className="font-semibold">{otherUser?.full_name || otherUser?.email || "Chat room"}</p>
-                {property?.title && <p className="text-xs text-muted-foreground">{property.title}</p>}
-              </div>
-              <div className="flex items-center gap-2">
-                {conversation.unread_count > 0 && <Badge>{conversation.unread_count} unread</Badge>}
-                <Badge variant="secondary">{conversation.conversation_type === "property" ? "Property" : "Direct"}</Badge>
-              </div>
-            </div>
-            
-            <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-              {conversation.last_message || "No messages yet"}
-            </p>
-            
-            <div className="flex items-center justify-between mt-3">
-              <div className="text-xs text-muted-foreground">
-                {conversation.property_id ? "About a property" : "Agent chat"}
-              </div>
-              <Button 
-                size="sm" 
-                variant="outline"
-                className="gap-2"
-                onClick={onOpen}
-              >
-                <MessageSquare className="h-3.5 w-3.5" /> Open Chat
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Profile Form Component
 function ProfileForm({
-  user, profile, role, onSaved, isPendingAgent,
+  user, profile, role, onSaved,
 }: {
   user: any;
   profile: any;
   role: string;
   onSaved: () => Promise<void>;
-  isPendingAgent: boolean;
 }) {
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
   const [phone, setPhone] = useState(profile?.phone ?? "");
@@ -398,7 +328,7 @@ function ProfileForm({
         full_name: fullName.trim(),
         phone: phone.trim(),
       };
-      if (role === "agent" && !isPendingAgent) {
+      if (role === "agent") {
         updateData.company_name = company.trim();
       }
 
@@ -424,18 +354,6 @@ function ProfileForm({
       <form className="md:col-span-2 rounded-2xl border bg-card p-6 space-y-5" onSubmit={handleSave}>
         <h3 className="font-semibold text-lg">Personal Information</h3>
 
-        {isPendingAgent && (
-          <div className="rounded-lg bg-yellow-500/15 border border-yellow-500/30 p-4">
-            <p className="text-sm font-medium text-yellow-600 flex items-center gap-2">
-              <Clock className="h-4 w-4" /> Agent Application Pending
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Your application to become an agent is being reviewed by an administrator. 
-              You will be notified once a decision is made.
-            </p>
-          </div>
-        )}
-
         <div className="grid sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="fullName">Full name</Label>
@@ -457,7 +375,7 @@ function ProfileForm({
           </div>
         </div>
 
-        {(role === "agent" && !isPendingAgent) && (
+        {role === "agent" && (
           <div className="space-y-2">
             <Label htmlFor="company">Company / Agency name</Label>
             <Input
@@ -492,7 +410,7 @@ function ProfileForm({
         <div className="rounded-2xl border bg-card p-5">
           <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-4">Account Details</h3>
           <div className="space-y-3">
-            <InfoRow icon={<UserIcon className="h-4 w-4 text-primary" />} label="Account type" value={<span className="capitalize font-medium">{isPendingAgent ? "Pending Agent" : role}</span>} />
+            <InfoRow icon={<UserIcon className="h-4 w-4 text-primary" />} label="Account type" value={<span className="capitalize font-medium">{role}</span>} />
             <InfoRow icon={<CheckCircle2 className="h-4 w-4 text-success" />} label="Status" value={<span className="text-success font-medium">Active</span>} />
             {profile?.phone && <InfoRow icon={<Phone className="h-4 w-4 text-accent" />} label="Phone" value={profile.phone} />}
             {user?.email && <InfoRow icon={<Mail className="h-4 w-4 text-muted-foreground" />} label="Email" value={user.email} />}

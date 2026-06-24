@@ -121,8 +121,8 @@ function Register() {
       return;
     }
     
-    toast.success("Application submitted! Admin will review your request.");
-    navigate({ to: "/dashboard" });
+    toast.success("Application submitted! Your agent account is awaiting admin approval.");
+    navigate({ to: "/agent" });
   };
 
   return (

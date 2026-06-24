@@ -26,22 +26,26 @@ const NAV = [
 ];
 
 function AdminLayout() {
-  const { role, loading, signOut } = useAuth();
+  const { user, role, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
-    await navigate({ to: "/" });
+    await navigate({ to: "/", replace: true });
   };
 
   useEffect(() => {
     if (loading) return;
-    if (role !== "admin") navigate({ to: "/dashboard" });
-  }, [role, loading, navigate]);
+    if (!user) {
+      void navigate({ to: "/", replace: true });
+      return;
+    }
+    if (role !== "admin") void navigate({ to: "/dashboard", replace: true });
+  }, [user, role, loading, navigate]);
 
-  if (loading || role !== "admin") {
+  if (loading || !user || role !== "admin") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/20">
         <div className="text-center">

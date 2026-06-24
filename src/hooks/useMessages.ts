@@ -59,6 +59,9 @@ type CreateConversationInput = {
   sendInitialMessage?: boolean;
 };
 
+export const PENDING_AGENT_CHAT_MESSAGE =
+  "Your agent account is awaiting approval. You can chat with clients after an admin approves you.";
+
 export function orderedParticipants(userId: string, otherUserId: string): [string, string] {
   if (userId === otherUserId) {
     throw new Error("You cannot start a chat with yourself");
@@ -214,7 +217,7 @@ export function useAgentDirectory() {
 }
 
 export function useMessages(conversationId: string | null) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const queryClient = useQueryClient();
 
   const {
@@ -306,6 +309,7 @@ export function useMessages(conversationId: string | null) {
       message: string;
     }) => {
       if (!user) throw new Error("Not logged in");
+      if (role === "pending_agent") throw new Error(PENDING_AGENT_CHAT_MESSAGE);
       if (!isSupabaseConfigured || !supabase) throw new Error("Supabase not configured");
       if (user.id === receiverId) throw new Error("You cannot send a message to yourself");
 
@@ -324,6 +328,7 @@ export function useMessages(conversationId: string | null) {
     },
     onMutate: async (variables) => {
       if (!user) return undefined;
+      if (role === "pending_agent") return undefined;
       const body = variables.message.trim();
       if (!body) return undefined;
 
@@ -371,7 +376,7 @@ export function useMessages(conversationId: string | null) {
 }
 
 export function useCreateConversation() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -383,6 +388,7 @@ export function useCreateConversation() {
       sendInitialMessage = true,
     }: CreateConversationInput) => {
       if (!user) throw new Error("Not logged in");
+      if (role === "pending_agent") throw new Error(PENDING_AGENT_CHAT_MESSAGE);
       if (!isSupabaseConfigured || !supabase) throw new Error("Supabase not configured");
       if (user.id === otherUserId) throw new Error("You cannot start a chat with yourself");
 

@@ -1,7 +1,7 @@
 export function formatPrice(price: number, listing: "sale" | "rent" = "sale"): string {
-  const formatted = new Intl.NumberFormat("en-US", {
+  const formatted = new Intl.NumberFormat("en-NG", {
     style: "currency",
-    currency: "USD",
+    currency: "NGN",
     maximumFractionDigits: 0,
   }).format(price);
   return listing === "rent" ? `${formatted}/mo` : formatted;
